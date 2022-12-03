@@ -1,0 +1,18 @@
+CC=cc
+CFLAGS=-Wall
+
+BINS=libruuvitag.so testlistener
+
+all: $(BINS)
+
+libruuvitag.so: libruuvitag.c libruuvitag.h
+	$(CC) $(CFLAGS) -fPIC -shared -o $@ libruuvitag.c -lc
+
+testlistener: testlistener.c libruuvitag.so
+	$(CC) $(CFLAGS) -o $@ testlistener.c -L. -I. -lruuvitag
+
+run: testlistener
+	@LD_LIBRARY_PATH="$LD_LIBRARY_PATH;." ./testlistener
+
+clean:
+	rm -f *.o $(BINS)
