@@ -1,12 +1,14 @@
 CC=cc
 CFLAGS=-Wall
+GLIB_CFLAGS=$(shell pkg-config --cflags glib-2.0)
+
 
 BINS=libruuvitag.so testlistener
 
 all: $(BINS)
 
 libruuvitag.so: libruuvitag.c libruuvitag.h
-	$(CC) $(CFLAGS) -fPIC -shared -o $@ libruuvitag.c -lc
+	$(CC) $(CFLAGS) $(GLIB_CFLAGS) -fPIC -shared -o $@ libruuvitag.c -lc
 
 testlistener: testlistener.c libruuvitag.so
 	$(CC) $(CFLAGS) -o $@ testlistener.c -L. -I. -lruuvitag
