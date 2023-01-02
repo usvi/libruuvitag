@@ -15,8 +15,8 @@ typedef struct
 
 } libruuvitag_beacon_data_struct;
 
-uint8_t u8LibRuuvitagInit(char* s_listen_on);
+uint8_t u8LibRuuviTagInit(char* s_listen_on);
 
-uint8_t u8LibRuuvitagDeinit(void);
+uint8_t u8LibRuuviTagDeinit(void);
 
 #endif // #define _LIBRUUVITAG_H_

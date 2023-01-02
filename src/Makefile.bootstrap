@@ -8,7 +8,7 @@ BINS=libruuvitag.so testlistener
 all: $(BINS)
 
 libruuvitag.so: libruuvitag.c libruuvitag.h
-	$(CC) $(CFLAGS) $(GLIB_GIO_CFLAGS) -fPIC -shared -o $@ libruuvitag.c $(GLIB_GIO_LIBS) -lc
+	$(CC) $(CFLAGS) $(GLIB_GIO_CFLAGS) -fPIC -shared -o $@ libruuvitag.c $(GLIB_GIO_LIBS)
 
 testlistener: testlistener.c libruuvitag.so
 	$(CC) $(CFLAGS) -o $@ testlistener.c -L. -I. -lruuvitag $(GLIB_GIO_LIBS)
