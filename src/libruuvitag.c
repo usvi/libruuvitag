@@ -22,7 +22,7 @@ static pthread_t gt_glib_main_loop_thread;
 static void* pvGlibMainLoopThreadBody(void* pv_params);
 
 static GDBusConnection* gpx_dbus_system_connection = NULL;
-static GMainLoop* gpx_glib_main_loop = NULL;
+//static GMainLoop* gpx_glib_main_loop = NULL;
 
 // vSubscribeIfaceAddRemovals
 uint8_t gu8_ifaces_add_removal_subscribed = 0;
@@ -44,6 +44,7 @@ struct t_bluez_pair_mac_list_node
 
 static void vReconfigureReceivers(void)
 {
+  /*
   GDBusProxy* px_glib_dbus_proxy = NULL;
   GError* px_glib_error = NULL;
   GVariant* px_glib_top_container_variant = NULL;
@@ -139,6 +140,7 @@ static void vReconfigureReceivers(void)
       g_free(t_glib_object_path);
     }
   }
+  */
 }
 
 
@@ -164,6 +166,7 @@ static void vSignalCallbackDirector(GDBusConnection *sig,
      Interface: org.freedesktop.DBus.Properties
      Signal name: PropertiesChanged
   */
+  /*
   if ((g_strcmp0(object_path, "/") == 0) &&
       (g_strcmp0(interface, "org.freedesktop.DBus.ObjectManager") == 0) &&
       ((g_strcmp0(signal_name, "InterfacesAdded") == 0) ||
@@ -171,13 +174,14 @@ static void vSignalCallbackDirector(GDBusConnection *sig,
   {
     vReconfigureReceivers();
   }
+  */
 }
 
 
 void* pvGlibMainLoopThreadBody(void* pv_params)
 {
   sem_wait(&gx_glib_main_loop_semaphore);
-  g_main_loop_run(gpx_glib_main_loop);
+  //g_main_loop_run(gpx_glib_main_loop);
   
   return NULL;
 }
@@ -214,7 +218,7 @@ static uint8_t u8InitSystemDbusConnection(void)
       sem_post(&gx_mutation_semaphore);
       
       return LIBRUUVITAG_RES_FATAL;
-      }
+    }
   }
   sem_post(&gx_mutation_semaphore);
 
@@ -231,18 +235,20 @@ if (ARG_GOT_RESULT != ARG_COMPARING_TO_RESULT)                                \
 static void vInitMainLoop(void)
 {
   sem_wait(&gx_mutation_semaphore);
-
+  /*
   if (!gpx_glib_main_loop)
   {
     // Docs say this is never NULL after call:
     gpx_glib_main_loop = g_main_loop_new(NULL, FALSE);
-  }      
+  } 
+  */     
   sem_post(&gx_mutation_semaphore);
 }
 
 
 static void vSubscribeIfaceAddRemovals(void)
 {
+  /*
   sem_wait(&gx_mutation_semaphore);
   if (!gu8_ifaces_add_removal_subscribed)
   {
@@ -273,6 +279,7 @@ static void vSubscribeIfaceAddRemovals(void)
     gu8_ifaces_add_removal_subscribed = 1;
   }
   sem_post(&gx_mutation_semaphore);
+  */
 }
 
 static void vCreateGlibMainLoopThread(void)
@@ -307,9 +314,9 @@ uint8_t u8LibRuuviTagInit(char* s_listen_on, char* s_listen_to)
 uint8_t u8LibRuuviTagDeinit(void)
 {
   printf("Libruuvitag stopping\n");
-  g_dbus_connection_signal_unsubscribe(gpx_dbus_system_connection, gt_interfaces_removed_subs_id);
-  g_dbus_connection_signal_unsubscribe(gpx_dbus_system_connection, gt_interfaces_added_subs_id);
-  g_main_loop_quit(gpx_glib_main_loop);
+  //g_dbus_connection_signal_unsubscribe(gpx_dbus_system_connection, gt_interfaces_removed_subs_id);
+  //g_dbus_connection_signal_unsubscribe(gpx_dbus_system_connection, gt_interfaces_added_subs_id);
+  //g_main_loop_quit(gpx_glib_main_loop);
   pthread_join(gt_glib_main_loop_thread, NULL);
   g_dbus_connection_close_sync(gpx_dbus_system_connection, NULL, NULL);
   g_object_unref(gpx_dbus_system_connection);
