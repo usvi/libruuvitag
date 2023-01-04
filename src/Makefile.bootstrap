@@ -16,5 +16,7 @@ testlistener: testlistener.c libruuvitag.so
 run: testlistener
 	@LD_LIBRARY_PATH="$LD_LIBRARY_PATH;." ./testlistener
 
+valgrind: testlistener
+	@LD_LIBRARY_PATH="$LD_LIBRARY_PATH;." valgrind --leak-check=full --show-leak-kinds=all ./testlistener
 clean:
 	rm -f *.o $(BINS)
