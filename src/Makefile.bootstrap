@@ -1,17 +1,17 @@
 CC=cc
 CFLAGS=-Wall
-GLIB_GIO_CFLAGS=$(shell pkg-config --cflags glib-2.0 gio-2.0)
-GLIB_GIO_LIBS=$(shell pkg-config --libs glib-2.0 gio-2.0)
+DBUS_CFLAGS=$(shell pkg-config --cflags dbus-1)
+DBUS_LIBS=$(shell pkg-config --libs dbus-1)
 
 BINS=libruuvitag.so testlistener
 
 all: $(BINS)
 
 libruuvitag.so: libruuvitag.c libruuvitag.h
-	$(CC) $(CFLAGS) $(GLIB_GIO_CFLAGS) -fPIC -shared -o $@ libruuvitag.c $(GLIB_GIO_LIBS)
+	$(CC) $(CFLAGS) $(DBUS_CFLAGS) -fPIC -shared -o $@ libruuvitag.c $(DBUS_LIBS)
 
 testlistener: testlistener.c libruuvitag.so
-	$(CC) $(CFLAGS) -o $@ testlistener.c -L. -I. -lruuvitag $(GLIB_GIO_LIBS)
+	$(CC) $(CFLAGS) -o $@ testlistener.c -L. -I. -lruuvitag $(DBUS_LIBS)
 
 run: testlistener
 	@LD_LIBRARY_PATH="$LD_LIBRARY_PATH;." ./testlistener

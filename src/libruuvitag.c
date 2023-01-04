@@ -8,9 +8,10 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <semaphore.h>
+#include <pthread.h>
 
-#include <glib.h>
-#include <gio/gio.h>
+#include <dbus/dbus.h>
+
 
 
 volatile uint8_t gu8_dbus_semaphores_inited = 0;
@@ -21,13 +22,14 @@ static sem_t gx_glib_main_loop_semaphore;
 static pthread_t gt_glib_main_loop_thread;
 static void* pvGlibMainLoopThreadBody(void* pv_params);
 
-static GDBusConnection* gpx_dbus_system_connection = NULL;
+static DBusConnection* gpx_dbus_system_connection = NULL;
+//static GDBusConnection* gpx_dbus_system_connection = NULL;
 //static GMainLoop* gpx_glib_main_loop = NULL;
 
 // vSubscribeIfaceAddRemovals
 uint8_t gu8_ifaces_add_removal_subscribed = 0;
-static guint gt_interfaces_added_subs_id = 0;
-static guint gt_interfaces_removed_subs_id = 0;
+//static guint gt_interfaces_added_subs_id = 0;
+//static guint gt_interfaces_removed_subs_id = 0;
 
 
 
@@ -146,6 +148,7 @@ static void vReconfigureReceivers(void)
 
 
 
+  /* We get like:
 static void vSignalCallbackDirector(GDBusConnection *sig,
                                     const gchar *sender_name,
                                     const gchar *object_path,
@@ -154,7 +157,6 @@ static void vSignalCallbackDirector(GDBusConnection *sig,
                                     GVariant *parameters,
                                     gpointer user_data)
 {
-  /* We get like:
 
      Object path: /
      Interface: org.freedesktop.DBus.ObjectManager
@@ -174,8 +176,8 @@ static void vSignalCallbackDirector(GDBusConnection *sig,
   {
     vReconfigureReceivers();
   }
-  */
 }
+  */
 
 
 void* pvGlibMainLoopThreadBody(void* pv_params)
@@ -199,22 +201,19 @@ static void vInitSemaphores(void)
 
 static uint8_t u8InitSystemDbusConnection(void)
 {
-  GError* px_glib_error = NULL;
+  DBusError x_dbus_error;
 
   sem_wait(&gx_mutation_semaphore);
 
+  dbus_error_init(&x_dbus_error);
+                   
   if (!gpx_dbus_system_connection)
   {
-    gpx_dbus_system_connection = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &px_glib_error);
+    gpx_dbus_system_connection = dbus_bus_get (DBUS_BUS_SYSTEM, &x_dbus_error);
 
-    if (px_glib_error)
+    if (!gpx_dbus_system_connection)
     {
-      g_free(px_glib_error);
-      
-      if (gpx_dbus_system_connection)
-      {
-        g_object_unref(gpx_dbus_system_connection);
-      }
+      dbus_error_free(&x_dbus_error);
       sem_post(&gx_mutation_semaphore);
       
       return LIBRUUVITAG_RES_FATAL;
@@ -314,12 +313,14 @@ uint8_t u8LibRuuviTagInit(char* s_listen_on, char* s_listen_to)
 uint8_t u8LibRuuviTagDeinit(void)
 {
   printf("Libruuvitag stopping\n");
+
   //g_dbus_connection_signal_unsubscribe(gpx_dbus_system_connection, gt_interfaces_removed_subs_id);
   //g_dbus_connection_signal_unsubscribe(gpx_dbus_system_connection, gt_interfaces_added_subs_id);
   //g_main_loop_quit(gpx_glib_main_loop);
   pthread_join(gt_glib_main_loop_thread, NULL);
-  g_dbus_connection_close_sync(gpx_dbus_system_connection, NULL, NULL);
-  g_object_unref(gpx_dbus_system_connection);
+  //g_dbus_connection_close_sync(gpx_dbus_system_connection, NULL, NULL);
+  //g_object_unref(gpx_dbus_system_connection);
+  dbus_connection_unref(gpx_dbus_system_connection);
 
   return 0;
 }
