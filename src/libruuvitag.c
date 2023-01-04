@@ -10,7 +10,7 @@
 #include <semaphore.h>
 #include <pthread.h>
 
-#include <dbus/dbus.h>
+#include <systemd/sd-bus.h>
 
 
 
@@ -22,7 +22,7 @@ static sem_t gx_glib_main_loop_semaphore;
 static pthread_t gt_glib_main_loop_thread;
 static void* pvGlibMainLoopThreadBody(void* pv_params);
 
-static DBusConnection* gpx_dbus_system_connection = NULL;
+static sd_bus* gpx_dbus_system_connection = NULL;
 //static GDBusConnection* gpx_dbus_system_connection = NULL;
 //static GMainLoop* gpx_glib_main_loop = NULL;
 
@@ -201,19 +201,15 @@ static void vInitSemaphores(void)
 
 static uint8_t u8InitSystemDbusConnection(void)
 {
-  DBusError x_dbus_error;
-
+  int i_result = 0;
   sem_wait(&gx_mutation_semaphore);
-
-  dbus_error_init(&x_dbus_error);
                    
   if (!gpx_dbus_system_connection)
   {
-    gpx_dbus_system_connection = dbus_bus_get (DBUS_BUS_SYSTEM, &x_dbus_error);
+    i_result = sd_bus_open_system(&gpx_dbus_system_connection);
 
-    if (!gpx_dbus_system_connection)
+    if (i_result < 0)
     {
-      dbus_error_free(&x_dbus_error);
       sem_post(&gx_mutation_semaphore);
       
       return LIBRUUVITAG_RES_FATAL;
@@ -320,7 +316,7 @@ uint8_t u8LibRuuviTagDeinit(void)
   pthread_join(gt_glib_main_loop_thread, NULL);
   //g_dbus_connection_close_sync(gpx_dbus_system_connection, NULL, NULL);
   //g_object_unref(gpx_dbus_system_connection);
-  dbus_connection_unref(gpx_dbus_system_connection);
+  sd_bus_unref(gpx_dbus_system_connection);
 
   return 0;
 }

@@ -1,7 +1,7 @@
 CC=cc
 CFLAGS=-Wall
-DBUS_CFLAGS=$(shell pkg-config --cflags dbus-1)
-DBUS_LIBS=$(shell pkg-config --libs dbus-1)
+DBUS_CFLAGS=$(shell pkg-config --cflags libsystemd)
+DBUS_LIBS=$(shell pkg-config --libs libsystemd)
 
 BINS=libruuvitag.so testlistener
 
