@@ -9,27 +9,26 @@
 #include <stdio.h>
 #include <semaphore.h>
 #include <pthread.h>
+#include <signal.h>
+#include <string.h>
 
-#include <systemd/sd-bus.h>
+#include <dbus/dbus.h>
 
 
 
 volatile uint8_t gu8_dbus_semaphores_inited = 0;
-static sem_t gx_mutation_semaphore;
 
-uint8_t gu8_glib_main_loop_thread_created = 0;
+static sem_t gx_shared_data_semaphore;
+static sem_t gx_msg_processing_semaphore;
+
+uint8_t gu8_dbus_main_loop_thread_created = 0;
 static sem_t gx_glib_main_loop_semaphore;
 static pthread_t gt_glib_main_loop_thread;
-static void* pvGlibMainLoopThreadBody(void* pv_params);
 
-static sd_bus* gpx_dbus_system_connection = NULL;
-//static GDBusConnection* gpx_dbus_system_connection = NULL;
-//static GMainLoop* gpx_glib_main_loop = NULL;
 
-// vSubscribeIfaceAddRemovals
+static DBusConnection* gpx_dbus_system_conn = NULL;
+
 uint8_t gu8_ifaces_add_removal_subscribed = 0;
-//static guint gt_interfaces_added_subs_id = 0;
-//static guint gt_interfaces_removed_subs_id = 0;
 
 
 
@@ -44,146 +43,42 @@ struct t_bluez_pair_mac_list_node
 };
 
 
-static void vReconfigureReceivers(void)
+
+
+
+
+static void vIncomingMessageDirector(DBusMessage* px_dbus_msg)
 {
-  /*
-  GDBusProxy* px_glib_dbus_proxy = NULL;
-  GError* px_glib_error = NULL;
-  GVariant* px_glib_top_container_variant = NULL;
-  GVariant* px_glib_top_content_variant = NULL;
-  GVariantIter x_glib_top_content_iterator;
-  gchar* t_glib_object_path = NULL;
-  GVariant* px_glib_interface_and_properties_variant = NULL;
-  GVariantIter x_glib_interface_and_properties_iterator;
-  gchar* t_glib_interface_name = NULL;
-  GVariant* px_glib_properties_variant = NULL;
-  GVariantIter x_glib_adapter_properties_iterator;
-  gchar* t_glib_adapter_property_key = NULL;
-  GVariant* px_glib_adapter_property_variant = NULL;
-  const gchar* t_glib_adapter_address = NULL;
-  
-  px_glib_dbus_proxy =
-    g_dbus_proxy_new_sync(gpx_dbus_system_connection,
-                          G_DBUS_PROXY_FLAGS_NONE,
-                          NULL,
-                          "org.bluez",
-                          "/",
-                          "org.freedesktop.DBus.ObjectManager",
-                          NULL,
-                          &px_glib_error);
+  printf("Actual message got\n");
 
-  if (px_glib_error != NULL)
-  {
-    return;
-  }
-
-  px_glib_top_container_variant =
-    g_dbus_proxy_call_sync(px_glib_dbus_proxy,
-                           "GetManagedObjects",
-                           NULL,
-                           G_DBUS_CALL_FLAGS_NONE,
-                           -1,
-                           NULL,
-                           &px_glib_error);
-
-  if (px_glib_error != NULL)
-  {
-    return;
-  }
-
-  if (px_glib_top_container_variant)
-  {
-    px_glib_top_content_variant = g_variant_get_child_value(px_glib_top_container_variant, 0);
-    g_variant_iter_init(&x_glib_top_content_iterator,
-                        px_glib_top_content_variant);
-
-    while (g_variant_iter_next(&x_glib_top_content_iterator,
-                               "{&o@a{sa{sv}}}",
-                               &t_glib_object_path,
-                               &px_glib_interface_and_properties_variant))
-    {
-      // We have array if dicts. Now we need a dict with interface value org.bluez.Adapter1 .
-      // We can then scan properties of that variant
-      g_variant_iter_init(&x_glib_interface_and_properties_iterator,
-                          px_glib_interface_and_properties_variant);
-
-      while (g_variant_iter_next(&x_glib_interface_and_properties_iterator,
-                                 "{&s@a{sv}}",
-                                 &t_glib_interface_name,
-                                 &px_glib_properties_variant))
-      {
-        if (g_str_equal(t_glib_interface_name, "org.bluez.Adapter1"))
-        {
-
-          // And finally, we need to go trough individual datas
-          g_variant_iter_init(&x_glib_adapter_properties_iterator,
-                              px_glib_properties_variant);
-
-          while (g_variant_iter_next(&x_glib_adapter_properties_iterator,
-                                     "{&sv}",
-                                     &t_glib_adapter_property_key,
-                                     &px_glib_adapter_property_variant))
-          {
-            if (g_str_equal(t_glib_adapter_property_key, "Address"))
-            {
-              t_glib_adapter_address =
-                g_variant_get_string(px_glib_adapter_property_variant, NULL);
-              g_print("%s\n", t_glib_adapter_address);
-              // No need to free the string as variant free does it
-            }
-            g_variant_unref(px_glib_adapter_property_variant);
-            g_free(t_glib_adapter_property_key);
-          }
-        }
-        g_variant_unref(px_glib_properties_variant);
-        g_free(t_glib_interface_name);
-      }
-      g_variant_unref(px_glib_interface_and_properties_variant);
-      g_free(t_glib_object_path);
-    }
-  }
-  */
+  dbus_message_unref(px_dbus_msg);
 }
-
-
-
-
-  /* We get like:
-static void vSignalCallbackDirector(GDBusConnection *sig,
-                                    const gchar *sender_name,
-                                    const gchar *object_path,
-                                    const gchar *interface,
-                                    const gchar *signal_name,
-                                    GVariant *parameters,
-                                    gpointer user_data)
-{
-
-     Object path: /
-     Interface: org.freedesktop.DBus.ObjectManager
-     Signal name: InterfacesAdded
-
-     OR
-     
-     Object path: /org/bluez/hci0/dev_CD_99_36_8E_6E_70
-     Interface: org.freedesktop.DBus.Properties
-     Signal name: PropertiesChanged
-  */
-  /*
-  if ((g_strcmp0(object_path, "/") == 0) &&
-      (g_strcmp0(interface, "org.freedesktop.DBus.ObjectManager") == 0) &&
-      ((g_strcmp0(signal_name, "InterfacesAdded") == 0) ||
-       (g_strcmp0(signal_name, "InterfacesRemoved") == 0)))
-  {
-    vReconfigureReceivers();
-  }
-}
-  */
-
 
 void* pvGlibMainLoopThreadBody(void* pv_params)
 {
+  DBusMessage* px_dbus_msg = NULL;
+  
   sem_wait(&gx_glib_main_loop_semaphore);
-  //g_main_loop_run(gpx_glib_main_loop);
+  
+  while (dbus_connection_read_write(gpx_dbus_system_conn, -1))
+  {
+    printf("Inside while\n");
+
+    if (dbus_connection_get_dispatch_status(gpx_dbus_system_conn) ==
+        DBUS_DISPATCH_DATA_REMAINS)
+    {
+      // Might have message
+      sem_wait(&gx_msg_processing_semaphore);
+      px_dbus_msg = dbus_connection_pop_message(gpx_dbus_system_conn);
+
+      if (px_dbus_msg != NULL)
+      {
+        vIncomingMessageDirector(px_dbus_msg);
+      }
+      sem_post(&gx_msg_processing_semaphore);
+    }
+  }
+  printf("After while\n");
   
   return NULL;
 }
@@ -192,30 +87,31 @@ static void vInitSemaphores(void)
 {
   if (!gu8_dbus_semaphores_inited)
   {
-    sem_init(&gx_mutation_semaphore, 0, 1);
-    sem_init(&gx_glib_main_loop_semaphore, 0, 0);
     gu8_dbus_semaphores_inited = 1;
+    sem_init(&gx_shared_data_semaphore, 0, 1);
+    sem_init(&gx_glib_main_loop_semaphore, 0, 0);
+    sem_init(&gx_msg_processing_semaphore, 0, 1);
   }
 }
 
 
 static uint8_t u8InitSystemDbusConnection(void)
 {
-  int i_result = 0;
-  sem_wait(&gx_mutation_semaphore);
+  DBusError x_dbus_error;
+  
+  sem_wait(&gx_shared_data_semaphore);
                    
-  if (!gpx_dbus_system_connection)
+  if (!gpx_dbus_system_conn)
   {
-    i_result = sd_bus_open_system(&gpx_dbus_system_connection);
+    dbus_error_init(&x_dbus_error);
+    gpx_dbus_system_conn = dbus_bus_get(DBUS_BUS_SYSTEM, &x_dbus_error);
 
-    if (i_result < 0)
+    if (dbus_error_is_set(&x_dbus_error))
     {
-      sem_post(&gx_mutation_semaphore);
-      
       return LIBRUUVITAG_RES_FATAL;
     }
   }
-  sem_post(&gx_mutation_semaphore);
+  sem_post(&gx_shared_data_semaphore);
 
   return LIBRUUVITAG_RES_OK;
 }
@@ -227,66 +123,183 @@ if (ARG_GOT_RESULT != ARG_COMPARING_TO_RESULT)                                \
 }
 
 
-static void vInitMainLoop(void)
+
+
+static void vCreateDbusMainLoopThread(void)
 {
-  sem_wait(&gx_mutation_semaphore);
-  /*
-  if (!gpx_glib_main_loop)
+  sem_wait(&gx_shared_data_semaphore);
+  
+  if (!gu8_dbus_main_loop_thread_created)
   {
-    // Docs say this is never NULL after call:
-    gpx_glib_main_loop = g_main_loop_new(NULL, FALSE);
-  } 
-  */     
-  sem_post(&gx_mutation_semaphore);
-}
-
-
-static void vSubscribeIfaceAddRemovals(void)
-{
-  /*
-  sem_wait(&gx_mutation_semaphore);
-  if (!gu8_ifaces_add_removal_subscribed)
-  {
-    gt_interfaces_added_subs_id =
-      g_dbus_connection_signal_subscribe(gpx_dbus_system_connection,
-                                         "org.bluez",
-                                         "org.freedesktop.DBus.ObjectManager",
-                                         "InterfacesAdded",
-                                         NULL,
-                                         NULL,
-                                         G_DBUS_SIGNAL_FLAGS_NONE,
-                                         vSignalCallbackDirector,
-                                         NULL,
-                                         NULL);
-
-    gt_interfaces_removed_subs_id =
-      g_dbus_connection_signal_subscribe(gpx_dbus_system_connection,
-                                         "org.bluez",
-                                         "org.freedesktop.DBus.ObjectManager",
-                                         "InterfacesRemoved",
-                                         NULL,
-                                         NULL,
-                                         G_DBUS_SIGNAL_FLAGS_NONE,
-                                         vSignalCallbackDirector,
-                                         NULL,
-                                         NULL);
-
-    gu8_ifaces_add_removal_subscribed = 1;
-  }
-  sem_post(&gx_mutation_semaphore);
-  */
-}
-
-static void vCreateGlibMainLoopThread(void)
-{
-  sem_wait(&gx_mutation_semaphore);
-  if (!gu8_glib_main_loop_thread_created)
-  {
-    
     pthread_create(&gt_glib_main_loop_thread, NULL, pvGlibMainLoopThreadBody, NULL);
-    sem_post(&gx_glib_main_loop_semaphore);
   }
-  sem_post(&gx_mutation_semaphore);
+  sem_post(&gx_shared_data_semaphore);
+}
+
+static void vSetDbusMainLoopThreadRunning(void)
+{
+  sem_post(&gx_glib_main_loop_semaphore);
+}
+
+static void vSubscribeBluezInterfaceMessages(void)
+{
+  dbus_bus_add_match(gpx_dbus_system_conn,
+                     "type='signal',"
+                     "sender='org.bluez',"
+                     "interface='org.freedesktop.DBus.ObjectManager',"
+                     "member=InterfacesAdded",
+                     NULL);
+  dbus_bus_add_match(gpx_dbus_system_conn,
+                     "type='signal',"
+                     "sender='org.bluez',"
+                     "interface='org.freedesktop.DBus.ObjectManager',"
+                     "member=InterfacesRemoved",
+                     NULL);
+  dbus_connection_flush(gpx_dbus_system_conn);
+}
+
+
+static void vExtractIteratorDataRec(DBusMessageIter* px_root_iterator,
+                                    uint8_t u8_depth,
+                                    int i_this_container_type,
+                                    char* s_object_path,
+                                    char* s_interface,
+                                    char* s_key)
+{
+  DBusMessageIter x_sub_iterator;
+  int i_dbus_type;
+  char* s_parsed_string = NULL;
+  char* s_parsed_object_path = NULL;
+  char* s_parsed_interface = NULL;
+  char* s_parsed_key = NULL;
+  uint8_t u8_a_string_parsed = 0;
+  
+  do
+  {
+    i_dbus_type = dbus_message_iter_get_arg_type(px_root_iterator);
+
+    if (dbus_type_is_container(i_dbus_type))
+    {
+      // printf("Is container %c\n", i_dbus_type);
+      dbus_message_iter_recurse(px_root_iterator, &x_sub_iterator);
+      vExtractIteratorDataRec(&x_sub_iterator,
+                              u8_depth + 1,
+                              i_dbus_type,
+                              
+                              ((s_parsed_object_path != NULL) ?
+                               s_parsed_object_path :
+                               s_object_path),
+
+                              ((s_parsed_interface != NULL) ?
+                               s_parsed_interface :
+                               s_interface),
+
+                              ((s_parsed_key != NULL) ?
+                               s_parsed_key :
+                               s_key)
+                              );
+
+    }
+    else if (dbus_type_is_basic(i_dbus_type))
+    {
+      //printf("Is basic %c\n", i_dbus_type);
+
+      if (i_dbus_type == DBUS_TYPE_STRING)
+      {
+        if (u8_a_string_parsed > 0)
+        {
+          dbus_message_iter_get_basic(px_root_iterator,
+                                      &s_parsed_string);
+
+          printf("%s / %s . %s -> %s\n", s_object_path, s_interface, s_key, s_parsed_string);
+        }
+        else // First element
+        {
+          if (u8_depth == 4)
+          {
+            dbus_message_iter_get_basic(px_root_iterator,
+                                        &s_parsed_interface);
+          }
+          else if (i_this_container_type == DBUS_TYPE_DICT_ENTRY)
+          {
+            dbus_message_iter_get_basic(px_root_iterator,
+                                        &s_parsed_key);
+          }
+          else
+          {
+            dbus_message_iter_get_basic(px_root_iterator,
+                                        &s_parsed_string);
+
+            printf("%s / %s . %s -> %s\n", s_object_path, s_interface, s_key, s_parsed_string);
+          }
+        }
+        u8_a_string_parsed = 1;
+      }
+      else if (i_dbus_type == DBUS_TYPE_OBJECT_PATH)
+      {
+        dbus_message_iter_get_basic(px_root_iterator,
+                                    &s_parsed_object_path);
+        //printf("Object_Path: >%s<\n", s_parsed_object_path);
+      }
+      else
+      {
+        //printf("Basic type %c\n", i_dbus_type);
+      }
+    }
+    else
+    {
+      //printf("Unhandled type %c\n", i_dbus_type);
+    }
+  }
+  while (dbus_message_iter_next(px_root_iterator));
+  //printf("%c\n", dbus_message_iter_get_arg_type(px_root_iterator));
+}
+
+
+static void vReflectInterfaceStates(void)
+{
+  DBusMessage* px_dbus_msg_sent = NULL;
+  DBusMessage* px_dbus_msg_reply = NULL;
+  DBusError x_dbus_error;
+  DBusMessageIter x_reply_iterator;
+ 
+  dbus_error_init(&x_dbus_error);
+  
+  
+  
+  px_dbus_msg_sent =
+    dbus_message_new_method_call("org.bluez",
+                                 "/",
+                                 "org.freedesktop.DBus.ObjectManager",
+                                 "GetManagedObjects");
+
+  if (px_dbus_msg_sent == NULL)
+  {
+    return;
+  }
+
+  px_dbus_msg_reply =
+    dbus_connection_send_with_reply_and_block(gpx_dbus_system_conn,
+                                              px_dbus_msg_sent,
+                                              2000,
+                                              &x_dbus_error);
+
+  if (dbus_error_is_set(&x_dbus_error) || px_dbus_msg_reply == NULL)
+  {
+    if (px_dbus_msg_sent != NULL)
+    {
+      dbus_message_unref(px_dbus_msg_sent);
+    }
+    if (px_dbus_msg_reply != NULL)
+    {
+      dbus_message_unref(px_dbus_msg_reply);
+    }
+    return;
+  }
+  dbus_message_iter_init(px_dbus_msg_reply, &x_reply_iterator);
+
+  //dbus_message_iter_get_arg_type(&x_reply_iterator);
+  vExtractIteratorDataRec(&x_reply_iterator, 0, DBUS_TYPE_INVALID, "", "", "");
 }
 
 
@@ -297,10 +310,16 @@ uint8_t u8LibRuuviTagInit(char* s_listen_on, char* s_listen_to)
   vInitSemaphores();
   u8_result = u8InitSystemDbusConnection();
   ASSERT_RESULT(u8_result, LIBRUUVITAG_RES_OK);
-  vInitMainLoop();
-  vSubscribeIfaceAddRemovals();
-  vCreateGlibMainLoopThread();
-  vReconfigureReceivers();
+  vCreateDbusMainLoopThread();
+  vSubscribeBluezInterfaceMessages();
+  // vReflectInterfaceStates() needs to be called before
+  // setting main loop running because otherwise
+  // there is a deadlock since both sender and the
+  // main loop receiver both try the same lock.
+  sem_wait(&gx_msg_processing_semaphore);
+  vReflectInterfaceStates();
+  sem_post(&gx_msg_processing_semaphore);
+  vSetDbusMainLoopThreadRunning();
   
   return LIBRUUVITAG_RES_OK;
 }
@@ -310,13 +329,11 @@ uint8_t u8LibRuuviTagDeinit(void)
 {
   printf("Libruuvitag stopping\n");
 
-  //g_dbus_connection_signal_unsubscribe(gpx_dbus_system_connection, gt_interfaces_removed_subs_id);
-  //g_dbus_connection_signal_unsubscribe(gpx_dbus_system_connection, gt_interfaces_added_subs_id);
-  //g_main_loop_quit(gpx_glib_main_loop);
+  sem_wait(&gx_msg_processing_semaphore);
+  pthread_cancel(gt_glib_main_loop_thread);
   pthread_join(gt_glib_main_loop_thread, NULL);
-  //g_dbus_connection_close_sync(gpx_dbus_system_connection, NULL, NULL);
-  //g_object_unref(gpx_dbus_system_connection);
-  sd_bus_unref(gpx_dbus_system_connection);
+  dbus_connection_unref(gpx_dbus_system_conn);
+
 
   return 0;
 }

@@ -1,14 +1,14 @@
 CC=cc
 CFLAGS=-Wall
-DBUS_CFLAGS=$(shell pkg-config --cflags libsystemd)
-DBUS_LIBS=$(shell pkg-config --libs libsystemd)
+DBUS_CFLAGS=$(shell pkg-config --cflags dbus-1)
+DBUS_LIBS=$(shell pkg-config --libs dbus-1)
 
 BINS=libruuvitag.so testlistener
 
 all: $(BINS)
 
 libruuvitag.so: libruuvitag.c libruuvitag.h
-	$(CC) $(CFLAGS) $(DBUS_CFLAGS) -fPIC -shared -o $@ libruuvitag.c $(DBUS_LIBS)
+	$(CC) $(CFLAGS) $(DBUS_CFLAGS) -fPIC -shared -o $@ libruuvitag.c -lpthread $(DBUS_LIBS)
 
 testlistener: testlistener.c libruuvitag.so
 	$(CC) $(CFLAGS) -o $@ testlistener.c -L. -I. -lruuvitag $(DBUS_LIBS)
