@@ -159,12 +159,12 @@ static void vSubscribeBluezInterfaceMessages(void)
 }
 
 
-static void vExtractIteratorDataRec(DBusMessageIter* px_root_iterator,
-                                    uint8_t u8_depth,
-                                    int i_this_container_type,
-                                    char* s_object_path,
-                                    char* s_interface,
-                                    char* s_key)
+void vExtractIteratorDataRec(DBusMessageIter* px_root_iterator,
+                             uint8_t u8_depth,
+                             int i_this_container_type,
+                             char* s_object_path,
+                             char* s_interface,
+                             char* s_key)
 {
   DBusMessageIter x_sub_iterator;
   int i_dbus_type;
@@ -256,12 +256,20 @@ static void vExtractIteratorDataRec(DBusMessageIter* px_root_iterator,
 }
 
 
+void vExtractDbusMsgData(DBusMessage* px_dbus_msg)
+{
+  DBusMessageIter x_reply_iterator;
+
+  dbus_message_iter_init(px_dbus_msg, &x_reply_iterator);
+  vExtractIteratorDataRec(&x_reply_iterator, 0, DBUS_TYPE_INVALID, "", "", "");
+}
+
+
 static void vReflectInterfaceStates(void)
 {
   DBusMessage* px_dbus_msg_sent = NULL;
   DBusMessage* px_dbus_msg_reply = NULL;
   DBusError x_dbus_error;
-  DBusMessageIter x_reply_iterator;
  
   dbus_error_init(&x_dbus_error);
   
@@ -296,10 +304,7 @@ static void vReflectInterfaceStates(void)
     }
     return;
   }
-  dbus_message_iter_init(px_dbus_msg_reply, &x_reply_iterator);
-
-  //dbus_message_iter_get_arg_type(&x_reply_iterator);
-  vExtractIteratorDataRec(&x_reply_iterator, 0, DBUS_TYPE_INVALID, "", "", "");
+  vExtractDbusMsgData(px_dbus_msg_reply);
 }
 
 
