@@ -7,8 +7,12 @@ BINS=libruuvitag.so testlistener
 
 all: $(BINS)
 
-libruuvitag.so: libruuvitag.c libruuvitag.h
-	$(CC) $(CFLAGS) $(DBUS_CFLAGS) -fPIC -shared -o $@ libruuvitag.c -lpthread $(DBUS_LIBS)
+
+libruuvitag.o: libruuvitag.c libruuvitag.h
+	$(CC) $(CFLAGS) $(DBUS_CFLAGS) -fPIC -c -o $@ $<
+
+libruuvitag.so: libruuvitag.o
+	$(CC) -shared -o $@ $? -lpthread $(DBUS_LIBS)
 
 testlistener: testlistener.c libruuvitag.so
 	$(CC) $(CFLAGS) -o $@ testlistener.c -L. -I. -lruuvitag $(DBUS_LIBS)
