@@ -7,10 +7,6 @@
 
 #include <stdint.h>
 #include <stdio.h>
-//#include <semaphore.h>
-//#include <pthread.h>
-//#include <signal.h>
-//#include <string.h>
 
 #include <dbus/dbus.h>
 
