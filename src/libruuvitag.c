@@ -145,6 +145,7 @@ static void vSetDbusMainLoopThreadRunning(void)
 
 static void vSubscribeBluezInterfaceMessages(void)
 {
+  /*
   dbus_bus_add_match(gpx_dbus_system_conn,
                      "type='signal',"
                      "sender='org.bluez',"
@@ -158,8 +159,8 @@ static void vSubscribeBluezInterfaceMessages(void)
                      "member=InterfacesRemoved",
                      NULL);
   dbus_connection_flush(gpx_dbus_system_conn);
+  */
 }
-
 
 
 static void vReflectInterfaceStates(void)
@@ -167,7 +168,8 @@ static void vReflectInterfaceStates(void)
   DBusMessage* px_dbus_msg_sent = NULL;
   DBusMessage* px_dbus_msg_reply = NULL;
   DBusError x_dbus_error;
- 
+  dbus_llist_type* px_receiver_addresses_llist = NULL;
+  
   dbus_error_init(&x_dbus_error);
   
   
@@ -201,7 +203,17 @@ static void vReflectInterfaceStates(void)
     }
     return;
   }
-  vExtractDbusMsgData(px_dbus_msg_reply);
+  dbus_message_unref(px_dbus_msg_sent);
+
+  px_receiver_addresses_llist = pxNewDbusLinkedList();
+  vExtractDbusMsgData(px_dbus_msg_reply,
+                      NULL,
+                      "org.bluez.Adapter1",
+                      "Address",
+                      px_receiver_addresses_llist);
+  dbus_message_unref(px_dbus_msg_reply);
+  vPrintDbusLinkedList(px_receiver_addresses_llist);
+  vDeleteDbusLinkedList(px_receiver_addresses_llist);
 }
 
 
@@ -235,7 +247,6 @@ uint8_t u8LibRuuviTagDeinit(void)
   pthread_cancel(gt_glib_main_loop_thread);
   pthread_join(gt_glib_main_loop_thread, NULL);
   dbus_connection_unref(gpx_dbus_system_conn);
-
 
   return 0;
 }
