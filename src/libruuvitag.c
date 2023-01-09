@@ -30,7 +30,7 @@ static uint8_t u8InitAllInContext(x_libruuvitag_context_type* px_context)
 
 static void vDeinitAllInContext(x_libruuvitag_context_type* px_context)
 {
-  
+  vDeinitSystemDbusConnection(&(px_context->px_dbus_sys_conn));
 }
 
 uint8_t u8LibRuuviTagInit(char* s_listen_on, char* s_listen_to)

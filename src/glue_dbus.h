@@ -6,5 +6,6 @@
 #include <dbus/dbus.h>
 
 uint8_t u8InitSystemDbusConnection(DBusConnection** ppx_dbus_system_conn);
+void vDeinitSystemDbusConnection(DBusConnection** ppx_dbus_system_conn);
 
 #endif // #ifndef _LIBRUUVITAG_GLUE_DBUS_H_
