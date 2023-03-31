@@ -1,5 +1,5 @@
-#ifndef _LIBRUUVITAG_GLUE_DBUS_H_
-#define _LIBRUUVITAG_GLUE_DBUS_H_
+#ifndef _LRT_GLUE_DBUS_H_
+#define _LRT_GLUE_DBUS_H_
 
 #include <stdint.h>
 
@@ -8,4 +8,4 @@
 uint8_t u8InitSystemDbusConnection(DBusConnection** ppx_dbus_system_conn);
 void vDeinitSystemDbusConnection(DBusConnection** ppx_dbus_system_conn);
 
-#endif // #ifndef _LIBRUUVITAG_GLUE_DBUS_H_
+#endif // #ifndef _LRT_GLUE_DBUS_H_
