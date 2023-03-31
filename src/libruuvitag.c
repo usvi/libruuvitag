@@ -1,8 +1,8 @@
 
 #include "libruuvitag.h"
 
-#include "internal_context.h"
-#include "glue_dbus.h"
+#include "lrt_context.h"
+#include "lrt_glue_dbus.h"
 
 #ifdef HAVE_CONFIG_H
 #include <config.h>
@@ -11,10 +11,11 @@
 #include <stdio.h>
 #include <string.h>
 
-x_libruuvitag_context_type gx_lib_context;
+
+x_lrt_context_type gx_lib_context;
 
 
-static uint8_t u8InitAllInContext(x_libruuvitag_context_type* px_context)
+static uint8_t u8InitAllInContext(x_lrt_context_type* px_context)
 {
   uint8_t u8_retval;
     
@@ -28,7 +29,7 @@ static uint8_t u8InitAllInContext(x_libruuvitag_context_type* px_context)
   return u8_retval;
 }
 
-static void vDeinitAllInContext(x_libruuvitag_context_type* px_context)
+static void vDeinitAllInContext(x_lrt_context_type* px_context)
 {
   vDeinitSystemDbusConnection(&(px_context->px_dbus_sys_conn));
 }

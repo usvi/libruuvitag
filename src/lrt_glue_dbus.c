@@ -1,11 +1,20 @@
-#include "glue_dbus.h"
+#include "lrt_glue_dbus.h"
 
 #include "libruuvitag.h"
+#include "lrt_context.h"
 
 #include <stdio.h>
-
 #include <dbus/dbus.h>
 
+
+
+// Lets put this to context once we are otherwise done
+
+void* pvEventLoopRoutine(void* pv_data)
+{
+
+  return NULL;
+}
 
 uint8_t u8InitSystemDbusConnection(DBusConnection** ppx_dbus_system_conn)
 {

@@ -1,5 +1,5 @@
-#ifndef _LIBRUUVITAG_H_
-#define _LIBRUUVITAG_H_
+#ifndef _LRT_MAIN_H_
+#define _LRT_MAIN_H_
 
 #include <stdint.h>
 
@@ -13,4 +13,4 @@ uint8_t u8LibRuuviTagInit(char* s_listen_on, char* s_listen_to);
 
 uint8_t u8LibRuuviTagDeinit(void);
 
-#endif // #define _LIBRUUVITAG_H_
+#endif // #define _LRT_MAIN_H_
