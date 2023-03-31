@@ -1,4 +1,4 @@
-#include "lrt_glue_dbus.h"
+#include "lrt_dbus.h"
 
 #include "libruuvitag.h"
 #include "lrt_context.h"
@@ -16,18 +16,18 @@ void* pvEventLoopRoutine(void* pv_data)
   return NULL;
 }
 
-uint8_t u8InitSystemDbusConnection(DBusConnection** ppx_dbus_system_conn)
+uint8_t u8LrtInitDbus(lrt_context_type* px_lrt_context)
 {
   DBusError x_dbus_error;
 
   dbus_error_init(&x_dbus_error);
-  *ppx_dbus_system_conn = dbus_bus_get(DBUS_BUS_SYSTEM, &x_dbus_error);
+  px_lrt_context->x_dbus.px_sys_conn = dbus_bus_get(DBUS_BUS_SYSTEM, &x_dbus_error);
 
   // If needed, add a filter like:
   // dbus_connection_add_filter(priv->con, disconnect_filter, priv,
   // NULL);
   
-  if (*ppx_dbus_system_conn == NULL)
+  if (px_lrt_context->x_dbus.px_sys_conn == NULL)
   {
     dbus_error_free(&x_dbus_error);
     
@@ -44,7 +44,7 @@ uint8_t u8InitSystemDbusConnection(DBusConnection** ppx_dbus_system_conn)
   return LIBRUUVITAG_RES_OK;
 }
 
-void vDeinitSystemDbusConnection(DBusConnection** ppx_dbus_system_conn)
+void vLrtDeinitDbus(lrt_context_type* px_lrt_context)
 {
-  dbus_connection_unref(*ppx_dbus_system_conn);
+  dbus_connection_unref(px_lrt_context->x_dbus.px_sys_conn);
 }

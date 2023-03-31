@@ -2,7 +2,7 @@
 #include "libruuvitag.h"
 
 #include "lrt_context.h"
-#include "lrt_glue_dbus.h"
+#include "lrt_dbus.h"
 
 #ifdef HAVE_CONFIG_H
 #include <config.h>
@@ -12,14 +12,14 @@
 #include <string.h>
 
 
-x_lrt_context_type gx_lib_context;
+static lrt_context_type gx_lib_context;
 
 
-static uint8_t u8InitAllInContext(x_lrt_context_type* px_context)
+static uint8_t u8InitAllInContext(lrt_context_type* px_context)
 {
   uint8_t u8_retval;
     
-  u8_retval = u8InitSystemDbusConnection(&(px_context->px_dbus_sys_conn));
+  u8_retval = u8LrtInitDbus(px_context);
 
   if (u8_retval != LIBRUUVITAG_RES_OK)
   {
@@ -29,9 +29,9 @@ static uint8_t u8InitAllInContext(x_lrt_context_type* px_context)
   return u8_retval;
 }
 
-static void vDeinitAllInContext(x_lrt_context_type* px_context)
+static void vDeinitAllInContext(lrt_context_type* px_context)
 {
-  vDeinitSystemDbusConnection(&(px_context->px_dbus_sys_conn));
+  vLrtDeinitDbus(px_context);
 }
 
 uint8_t u8LibRuuviTagInit(char* s_listen_on, char* s_listen_to)

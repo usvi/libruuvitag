@@ -7,7 +7,7 @@ BINS=libruuvitag.so testlistener
 
 all: $(BINS)
 
-lrt_glue_dbus.o: lrt_glue_dbus.c lrt_glue_dbus.h lrt_context.h
+lrt_dbus.o: lrt_dbus.c lrt_dbus.h lrt_context.h
 	$(CC) $(CFLAGS) $(DBUS_CFLAGS) -fPIC -c -o $@ $<
 
 lrt_data_and_parsing.o: lrt_data_and_parsing.c lrt_data_and_parsing.h lrt_context.h
@@ -16,7 +16,7 @@ lrt_data_and_parsing.o: lrt_data_and_parsing.c lrt_data_and_parsing.h lrt_contex
 libruuvitag.o: libruuvitag.c libruuvitag.h lrt_context.h
 	$(CC) $(CFLAGS) $(DBUS_CFLAGS) -fPIC -c -o $@ $<
 
-libruuvitag.so: libruuvitag.o lrt_glue_dbus.o lrt_data_and_parsing.o
+libruuvitag.so: libruuvitag.o lrt_dbus.o lrt_data_and_parsing.o
 	$(CC) -shared -o $@ $^ -lpthread $(DBUS_LIBS) -levent
 
 testlistener: testlistener.c libruuvitag.so
