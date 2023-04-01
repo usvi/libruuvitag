@@ -4,22 +4,19 @@
 #include <semaphore.h>
 #include <dbus/dbus.h>
 
-typedef struct lrt_dbus_type lrt_dbus_type;
-typedef struct lrt_context_type lrt_context_type;
 
-
-struct lrt_dbus_type
+typedef struct
 {
   DBusConnection* px_sys_conn;
 
-};
+} lrt_dbus_type;
 
 
-struct lrt_context_type
+typedef struct
 {
   sem_t x_shared_data_semaphore;
   lrt_dbus_type* px_dbus;
-};
+} lrt_context_type;
 
 
 #endif // #ifndef _LRT_CONTEXT_H_
