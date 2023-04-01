@@ -31,10 +31,12 @@ static uint8_t u8InitAllInContext(lrt_context_type* px_context)
   return u8_retval;
 }
 
+
 static void vDeinitAllInContext(lrt_context_type* px_context)
 {
   vLrtDeinitDbus(px_context);
 }
+
 
 uint8_t u8LibRuuviTagInit(char* s_listen_on, char* s_listen_to)
 {

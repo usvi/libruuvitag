@@ -3,6 +3,8 @@
 #include "libruuvitag.h"
 #include "lrt_context.h"
 
+#include <stdlib.h>
+#include <string.h>
 #include <stdio.h>
 #include <dbus/dbus.h>
 
@@ -16,9 +18,28 @@ void* pvEventLoopRoutine(void* pv_data)
   return NULL;
 }
 
+
+static uint8_t u8LrtInitEventLoop(lrt_context_type* px_lrt_context)
+{
+  //px_lrt_context->px_dbus
+
+  return LIBRUUVITAG_RES_OK;
+}
+
+
 uint8_t u8LrtInitDbus(lrt_context_type* px_lrt_context)
 {
   DBusError x_dbus_error;
+  void* pv_malloc_test;
+
+  pv_malloc_test = malloc(sizeof(*(px_lrt_context->px_dbus)));
+
+  if (pv_malloc_test != NULL)
+  {
+    return LIBRUUVITAG_RES_FATAL;
+  }
+  px_lrt_context->px_dbus = (lrt_dbus_type*)pv_malloc_test;
+  memset(px_lrt_context->px_dbus, 0, sizeof(*(px_lrt_context->px_dbus)));
 
   dbus_error_init(&x_dbus_error);
   px_lrt_context->px_dbus->px_sys_conn = dbus_bus_get(DBUS_BUS_SYSTEM, &x_dbus_error);
@@ -30,16 +51,21 @@ uint8_t u8LrtInitDbus(lrt_context_type* px_lrt_context)
   if (px_lrt_context->px_dbus->px_sys_conn == NULL)
   {
     dbus_error_free(&x_dbus_error);
+    free(px_lrt_context->px_dbus);
     
     return LIBRUUVITAG_RES_FATAL;
   }
   if (dbus_error_is_set(&x_dbus_error))
   {
     dbus_error_free(&x_dbus_error);
+    free(px_lrt_context->px_dbus);
 
     return LIBRUUVITAG_RES_FATAL;
   }
   dbus_error_free(&x_dbus_error);
+
+  // Lets put this somewhere when we know better:
+  u8LrtInitEventLoop(px_lrt_context);
 
   return LIBRUUVITAG_RES_OK;
 }
@@ -47,4 +73,9 @@ uint8_t u8LrtInitDbus(lrt_context_type* px_lrt_context)
 void vLrtDeinitDbus(lrt_context_type* px_lrt_context)
 {
   dbus_connection_unref(px_lrt_context->px_dbus->px_sys_conn);
+
+  if (px_lrt_context->px_dbus != NULL)
+  {
+    free(px_lrt_context->px_dbus);
+  }
 }

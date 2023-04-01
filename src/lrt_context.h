@@ -7,6 +7,7 @@
 
 typedef struct
 {
+  pthread_t px_event_loop_thread;
   DBusConnection* px_sys_conn;
 
 } lrt_dbus_type;
