@@ -22,8 +22,9 @@ static void* pvEventLoopRoutine(void* pv_data)
 
 static uint8_t u8LrtInitEventLoop(lrt_context_type* px_lrt_context)
 {
-  pthread_create(&(px_lrt_context->px_dbus->px_event_loop_thread),
+  pthread_create(&(px_lrt_context->px_dbus->x_event_loop_thread),
                  NULL, pvEventLoopRoutine, NULL);
+  px_lrt_context->px_dbus->u8_event_loop_running = 1;
 
   return LIBRUUVITAG_RES_OK;
 }
@@ -75,6 +76,12 @@ uint8_t u8LrtInitDbus(lrt_context_type* px_lrt_context)
 void vLrtDeinitDbus(lrt_context_type* px_lrt_context)
 {
   dbus_connection_unref(px_lrt_context->px_dbus->px_sys_conn);
+
+  
+  if (px_lrt_context->px_dbus->u8_event_loop_running)
+  {
+    pthread_cancel(px_lrt_context->px_dbus->x_event_loop_thread);
+  }
 
   if (px_lrt_context->px_dbus != NULL)
   {
