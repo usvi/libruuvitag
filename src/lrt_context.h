@@ -14,7 +14,7 @@ typedef struct
 typedef struct
 {
   sem_t x_shared_data_semaphore;
-  lrt_dbus_type x_dbus;
+  lrt_dbus_type* px_dbus;
 } lrt_context_type;
 
 

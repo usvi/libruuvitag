@@ -18,6 +18,8 @@ static lrt_context_type gx_lib_context;
 static uint8_t u8InitAllInContext(lrt_context_type* px_context)
 {
   uint8_t u8_retval;
+
+  sem_init(&(px_context->x_shared_data_semaphore), 0, 1);
     
   u8_retval = u8LrtInitDbus(px_context);
 
