@@ -12,9 +12,9 @@
 
 
 
-// Lets put this to context once we are otherwise done
 
-static void* pvEventLoopRoutine(void* pv_data)
+
+static void* pvEventLoopThreadRoutine(void* pv_data)
 {
   lrt_context_type* px_lrt_context = (lrt_context_type*)pv_data;
 
@@ -29,12 +29,24 @@ static void* pvEventLoopRoutine(void* pv_data)
   return LIBRUUVITAG_RES_OK;
 }
 
+static uint8_t u8LrtPrepareEventLoop(lrt_context_type* px_lrt_context)
+{
+  if (!dbus_connection_set_watch_functions(px_lrt_context->px_dbus->px_sys_conn,
+                                           NULL,
+                                           NULL,
+                                           NULL,
+                                           px_lrt_context, NULL))
+  {
+    return LIBRUUVITAG_RES_FATAL;
+  }
 
-static uint8_t u8LrtInitEventLoop(lrt_context_type* px_lrt_context)
+  return LIBRUUVITAG_RES_OK;
+}
+
+static uint8_t u8LrtRunEventLoop(lrt_context_type* px_lrt_context)
 {
   pthread_create(&(px_lrt_context->px_dbus->x_event_loop_thread),
-                 NULL, pvEventLoopRoutine, px_lrt_context);
-  // FIXME: If fails, set running = 0
+                 NULL, pvEventLoopThreadRoutine, px_lrt_context);
 
   return LIBRUUVITAG_RES_OK;
 }
@@ -65,7 +77,6 @@ uint8_t u8LrtInitDbus(lrt_context_type* px_lrt_context)
   {
     dbus_error_free(&x_dbus_error);
     free(px_lrt_context->px_dbus);
-    printf("FATAL A\n");
     
     return LIBRUUVITAG_RES_FATAL;
   }
@@ -73,16 +84,18 @@ uint8_t u8LrtInitDbus(lrt_context_type* px_lrt_context)
   {
     dbus_error_free(&x_dbus_error);
     free(px_lrt_context->px_dbus);
-    printf("FATAL B\n");
 
     return LIBRUUVITAG_RES_FATAL;
   }
   dbus_error_free(&x_dbus_error);
 
-  // Lets put this somewhere when we know better:
-  u8LrtInitEventLoop(px_lrt_context);
+  // Event loop setup here is fine
+  if (u8LrtPrepareEventLoop(px_lrt_context) == LIBRUUVITAG_RES_OK)
+  {
+    return u8LrtRunEventLoop(px_lrt_context);
+  }
 
-  return LIBRUUVITAG_RES_OK;
+  return LIBRUUVITAG_RES_FATAL;
 }
 
 void vLrtDeinitDbus(lrt_context_type* px_lrt_context)
