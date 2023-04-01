@@ -35,6 +35,7 @@ static uint8_t u8InitAllInContext(lrt_context_type* px_context)
 static void vDeinitAllInContext(lrt_context_type* px_context)
 {
   vLrtDeinitDbus(px_context);
+  sem_destroy(&(px_context->x_shared_data_semaphore));
 }
 
 

@@ -37,7 +37,7 @@ uint8_t u8LrtInitDbus(lrt_context_type* px_lrt_context)
 
   pv_malloc_test = malloc(sizeof(*(px_lrt_context->px_dbus)));
 
-  if (pv_malloc_test != NULL)
+  if (pv_malloc_test == NULL)
   {
     return LIBRUUVITAG_RES_FATAL;
   }
@@ -55,6 +55,7 @@ uint8_t u8LrtInitDbus(lrt_context_type* px_lrt_context)
   {
     dbus_error_free(&x_dbus_error);
     free(px_lrt_context->px_dbus);
+    printf("FATAL A\n");
     
     return LIBRUUVITAG_RES_FATAL;
   }
@@ -62,6 +63,7 @@ uint8_t u8LrtInitDbus(lrt_context_type* px_lrt_context)
   {
     dbus_error_free(&x_dbus_error);
     free(px_lrt_context->px_dbus);
+    printf("FATAL B\n");
 
     return LIBRUUVITAG_RES_FATAL;
   }
@@ -76,7 +78,6 @@ uint8_t u8LrtInitDbus(lrt_context_type* px_lrt_context)
 void vLrtDeinitDbus(lrt_context_type* px_lrt_context)
 {
   dbus_connection_unref(px_lrt_context->px_dbus->px_sys_conn);
-
   
   if (px_lrt_context->px_dbus->u8_event_loop_running)
   {
@@ -86,5 +87,6 @@ void vLrtDeinitDbus(lrt_context_type* px_lrt_context)
   if (px_lrt_context->px_dbus != NULL)
   {
     free(px_lrt_context->px_dbus);
+    px_lrt_context->px_dbus = NULL;
   }
 }
