@@ -6,13 +6,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <pthread.h>
 #include <dbus/dbus.h>
 
 
 
 // Lets put this to context once we are otherwise done
 
-void* pvEventLoopRoutine(void* pv_data)
+static void* pvEventLoopRoutine(void* pv_data)
 {
 
   return NULL;
@@ -21,7 +22,8 @@ void* pvEventLoopRoutine(void* pv_data)
 
 static uint8_t u8LrtInitEventLoop(lrt_context_type* px_lrt_context)
 {
-  //px_lrt_context->px_dbus
+  pthread_create(&(px_lrt_context->px_dbus->px_event_loop_thread),
+                 NULL, pvEventLoopRoutine, NULL);
 
   return LIBRUUVITAG_RES_OK;
 }
