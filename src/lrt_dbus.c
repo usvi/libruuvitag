@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <unistd.h>
 #include <pthread.h>
 #include <dbus/dbus.h>
 
@@ -15,16 +16,25 @@
 
 static void* pvEventLoopRoutine(void* pv_data)
 {
+  lrt_context_type* px_lrt_context = (lrt_context_type*)pv_data;
 
-  return NULL;
+  px_lrt_context->px_dbus->u8_event_loop_running = 1;
+
+  while (px_lrt_context->px_dbus->u8_event_loop_running)
+  {
+    printf("Thread\n");
+    sleep(1);
+  }
+
+  return LIBRUUVITAG_RES_OK;
 }
 
 
 static uint8_t u8LrtInitEventLoop(lrt_context_type* px_lrt_context)
 {
   pthread_create(&(px_lrt_context->px_dbus->x_event_loop_thread),
-                 NULL, pvEventLoopRoutine, NULL);
-  px_lrt_context->px_dbus->u8_event_loop_running = 1;
+                 NULL, pvEventLoopRoutine, px_lrt_context);
+  // FIXME: If fails, set running = 0
 
   return LIBRUUVITAG_RES_OK;
 }
