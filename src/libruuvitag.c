@@ -1,7 +1,6 @@
 
 #include "libruuvitag.h"
 
-#include "lrt_context.h"
 #include "lrt_dbus.h"
 
 #ifdef HAVE_CONFIG_H

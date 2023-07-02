@@ -1,7 +1,6 @@
 #include "lrt_dbus.h"
 
 #include "libruuvitag.h"
-#include "lrt_context.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -29,6 +28,9 @@ static void* pvEventLoopThreadRoutine(void* pv_data)
   return LIBRUUVITAG_RES_OK;
 }
 
+
+
+
 static uint8_t u8LrtPrepareEventLoop(lrt_context_type* px_lrt_context)
 {
   if (!dbus_connection_set_watch_functions(px_lrt_context->px_dbus->px_sys_conn,
@@ -42,6 +44,7 @@ static uint8_t u8LrtPrepareEventLoop(lrt_context_type* px_lrt_context)
 
   return LIBRUUVITAG_RES_OK;
 }
+
 
 static uint8_t u8LrtRunEventLoop(lrt_context_type* px_lrt_context)
 {
