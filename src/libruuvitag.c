@@ -7,53 +7,32 @@
 #include <config.h>
 #endif
 
-#include <stdio.h>
-#include <string.h>
+#include <stdlib.h>
 
 
-static lrt_context_type gx_lib_context;
 
-
-static uint8_t u8InitAllInContext(lrt_context_type* px_context)
+libruuvitag_context_type* pxLibRuuviTagInit(char* s_listen_on_bt_adapters, char* s_listen_to_ruuvitags)
 {
-  uint8_t u8_retval;
+  void* pv_malloc = NULL;
+  libruuvitag_context_type* px_created_context;
 
-  sem_init(&(px_context->x_shared_data_semaphore), 0, 1);
-    
-  u8_retval = u8LrtInitDbus(px_context);
+  pv_malloc = malloc(sizeof(libruuvitag_context_type));
 
-  if (u8_retval != LIBRUUVITAG_RES_OK)
+  if (pv_malloc == NULL)
   {
-    return u8_retval;
+    return NULL;
   }
 
-  return u8_retval;
+  px_created_context = pv_malloc;
+
+  return px_created_context;
 }
 
-
-static void vDeinitAllInContext(lrt_context_type* px_context)
+void vLibRuuviTagDeinit(libruuvitag_context_type* px_context)
 {
-  vLrtDeinitDbus(px_context);
-  sem_destroy(&(px_context->x_shared_data_semaphore));
-}
-
-
-uint8_t u8LibRuuviTagInit(char* s_listen_on, char* s_listen_to)
-{
-  uint8_t u8_retval;
-
-  printf("Libruuvitag starting\n");
-  memset(&gx_lib_context, 0, sizeof(gx_lib_context));
-  u8_retval = u8InitAllInContext(&gx_lib_context);
-
-  return u8_retval;
-}
-
-
-uint8_t u8LibRuuviTagDeinit(void)
-{
-  printf("Libruuvitag stopping\n");
-  vDeinitAllInContext(&gx_lib_context);
-
-  return LIBRUUVITAG_RES_OK;
+  if (px_context != NULL)
+  {
+    // Do first other teardown, then this
+    free(px_context);
+  }
 }

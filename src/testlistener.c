@@ -2,22 +2,30 @@
 
 #include <stdio.h>
 #include <unistd.h>
-#include <stdint.h>
-#include <inttypes.h>
+#include <signal.h>
 
 
-
-int main()
+void vSigintHandler(int i_signal_id)
 {
+  ;
+}
+
+
+int main(void)
+{
+  libruuvitag_context_type* px_context = NULL;
+
+  signal(SIGINT, vSigintHandler);
+  
   printf("Ruuvitag testlistener starting\n");
-  u8LibRuuviTagInit("+CURRENT+NEW", "+CURRENT+NEW");
+  printf("Initializing library\n");
+  px_context = pxLibRuuviTagInit("+CURRENT+NEW", "+CURRENT+NEW");
 
   // Emulate real program here
-  while(1)
-  {
-    sleep(1);
-  }
+  pause();
+
+  printf("\nDeinitializing library\n");
+  vLibRuuviTagDeinit(px_context);
   
-  u8LibRuuviTagDeinit();
   return 0;
 }
