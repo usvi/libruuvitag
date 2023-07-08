@@ -2,7 +2,8 @@
 #define _LRT_LINUX_DBUS_BLUEZ_H_
 
 
-// Dbus-related definitions to populate local structure
+// Headers needed in crafting our own dbus struct type.
+#include <inttypes.h>
 #include <dbus/dbus.h>
 
 
@@ -13,7 +14,7 @@ typedef struct lrt_ldb_context_type lrt_ldb_context_type;
 
 struct lrt_ldb_context_type
 {
-
+  DBusConnection* px_dbus_conn;
 };
 
 
@@ -22,6 +23,7 @@ struct lrt_ldb_context_type
 
 
 // Function prototypes
+uint8_t u8LrtInitLinuxDbusBluez(libruuvitag_context_type* px_full_context);
 
 #endif // #ifndef _LRT_LINUX_DBUS_BLUEZ_H_
 

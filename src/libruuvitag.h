@@ -2,6 +2,10 @@
 #define _LIBRUUVITAG_H_
 
 
+// Main context forward declaration
+typedef struct libruuvitag_context_type libruuvitag_context_type;
+
+
 // Assert proper backend and include corresponding header
 #ifdef BACKEND_LINUX_DBUS_BLUEZ
 #include "lrt_linux_dbus_bluez.h"
@@ -10,12 +14,11 @@
 #endif
 
 
-// Regular headers
+// Headers needed in crafting our own top-level context type.
 #include <stdint.h>
 
 
 // Common context definitons
-typedef struct libruuvitag_context_type libruuvitag_context_type;
 
 struct libruuvitag_context_type
 {
