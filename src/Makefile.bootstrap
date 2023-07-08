@@ -1,7 +1,10 @@
-CC=cc
-CFLAGS=-Wall
-DBUS_CFLAGS=$(shell pkg-config --cflags dbus-1)
-DBUS_LIBS=$(shell pkg-config --libs dbus-1)
+CC = cc
+CFLAGS = -Wall
+DBUS_CFLAGS = $(shell pkg-config --cflags dbus-1)
+DBUS_LIBS = $(shell pkg-config --libs dbus-1)
+
+# Make this conditional and affect also the makefile itself
+CFLAGS += -DBACKEND_LINUX_DBUS_BLUEZ=1
 
 BINS=libruuvitag.so testlistener
 
