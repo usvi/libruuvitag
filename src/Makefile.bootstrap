@@ -20,7 +20,7 @@ libruuvitag.so: libruuvitag.o lrt_linux_dbus_bluez.o
 	$(CC) -shared -o $@ $^ -lpthread $(DBUS_LIBS)
 
 testlistener: testlistener.c libruuvitag.so
-	$(CC) $(CFLAGS) -o $@ testlistener.c -L. -I. -lruuvitag $(DBUS_LIBS)
+	$(CC) $(CFLAGS) $(DBUS_CFLAGS) -o $@ testlistener.c -L. -I. -lruuvitag $(DBUS_LIBS)
 
 run: testlistener
 	@LD_LIBRARY_PATH="$LD_LIBRARY_PATH;." ./testlistener

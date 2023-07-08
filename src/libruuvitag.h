@@ -1,5 +1,5 @@
-#ifndef _LRT_MAIN_H_
-#define _LRT_MAIN_H_
+#ifndef _LIBRUUVITAG_H_
+#define _LIBRUUVITAG_H__
 
 #ifdef BACKEND_LINUX_DBUS_BLUEZ
 #include "lrt_linux_dbus_bluez.h"
@@ -20,7 +20,7 @@ struct libruuvitag_context_type
 {
   // Common structures
 #ifdef BACKEND_LINUX_DBUS_BLUEZ
-  // Linux DBUS/Bluez structures
+  lrt_ldb_context_type ldb_context;
 #endif
 };
 
@@ -29,4 +29,5 @@ libruuvitag_context_type* pxLibRuuviTagInit(char* s_listen_on_bt_adapters, char*
 
 void vLibRuuviTagDeinit(libruuvitag_context_type* px_context);
 
-#endif // #define _LRT_MAIN_H_
+#endif // #define _LIBRUUVITAG_H_
+
