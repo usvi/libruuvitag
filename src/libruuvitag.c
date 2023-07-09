@@ -44,7 +44,10 @@ void vLibRuuviTagDeinit(libruuvitag_context_type* px_context)
 {
   if (px_context != NULL)
   {
-    // Do first other teardown, then this
+#ifdef BACKEND_LINUX_DBUS_BLUEZ
+    u8LrtDeinitLinuxDbusBluez(px_context);
+#endif // #ifdef BACKEND_LINUX_DBUS_BLUEZ
+    
     free(px_context);
   }
 }
