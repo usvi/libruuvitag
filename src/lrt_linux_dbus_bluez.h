@@ -22,8 +22,16 @@ struct lrt_ldb_context_type
 #include "libruuvitag.h"
 
 
+// Normal defines
+#define LDB_SUCCESS        (1)
+#define LDB_FAIL           (0)
+#define LDB_AGAIN          (2)
+
+
+
 // Function prototypes
 uint8_t u8LrtInitLinuxDbusBluez(libruuvitag_context_type* px_full_context);
+uint8_t u8LrtDeinitLinuxDbusBluez(libruuvitag_context_type* px_full_context);
 
 #endif // #ifndef _LRT_LINUX_DBUS_BLUEZ_H_
 

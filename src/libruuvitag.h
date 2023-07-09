@@ -18,8 +18,7 @@ typedef struct libruuvitag_context_type libruuvitag_context_type;
 #include <stdint.h>
 
 
-// Common context definitons
-
+// Top-level context definition.
 struct libruuvitag_context_type
 {
   // Common structures

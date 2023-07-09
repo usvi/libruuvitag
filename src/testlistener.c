@@ -21,6 +21,13 @@ int main(void)
   printf("Initializing library\n");
   px_context = pxLibRuuviTagInit("+CURRENT+NEW", "+CURRENT+NEW");
 
+  if (px_context == NULL)
+  {
+    printf("Unable to initialize library\n");
+
+    return 1;
+  }
+  
   // Emulate real program here
   pause();
 
