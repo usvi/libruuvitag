@@ -20,7 +20,7 @@ static DBusHandlerResult tInterfacesAltered(DBusConnection* px_dbus_conn,
 
 
 
-static uint8_t u8LrtInitIpc(libruuvitag_context_type* px_full_ctx)
+static uint8_t u8LdbInitIpc(libruuvitag_context_type* px_full_ctx)
 {
   DBusError x_error;
 
@@ -69,15 +69,43 @@ static uint8_t u8LrtInitIpc(libruuvitag_context_type* px_full_ctx)
   return LDB_SUCCESS;
 }
 
-static void* vLrtEventLoopBody(void* pv_arg_data)
+
+static uint8_t u8LdbReadControl(libruuvitag_context_type* px_full_ctx)
+{
+  uint8_t u8_read_control;
+  
+  if (sizeof(u8_read_control) == read(px_full_ctx->x_ldb.i_evl_control_read_fd,
+                                 &u8_read_control, sizeof(u8_read_control)))
+  {
+    if ((u8_read_control == LDB_CONTROL_TERMINATE) ||
+        (u8_read_control == LDB_CONTROL_DBUS_RECONFIGURE))
+    {
+      ; // All ok
+    }
+    else
+    {
+      u8_read_control = LDB_CONTROL_ERROR;
+    }
+  }
+
+  return u8_read_control;
+}
+
+
+static void vLdbWriteControl(libruuvitag_context_type* px_full_ctx, uint8_t u8_control_val)
+{
+  write(px_full_ctx->x_ldb.i_evl_control_write_fd, &u8_control_val, sizeof(u8_control_val));
+}
+
+
+static void* vLdbEventLoopBody(void* pv_arg_data)
 {
   libruuvitag_context_type* px_full_ctx = NULL;
   int ai_pipe_fds[2];
   fd_set x_read_fds;
-  int i_control_read_fd;
   int i_select_res;
-  uint8_t u8_control;
   uint8_t u8_evl_running = LDB_TRUE;
+  uint8_t u8_read_control;
 
   px_full_ctx = (libruuvitag_context_type*)pv_arg_data;
 
@@ -86,12 +114,12 @@ static void* vLrtEventLoopBody(void* pv_arg_data)
     printf("Pipe failed\n");
   }
   px_full_ctx->x_ldb.i_evl_control_write_fd = ai_pipe_fds[1];
-  i_control_read_fd = ai_pipe_fds[0];
-
+  px_full_ctx->x_ldb.i_evl_control_read_fd = ai_pipe_fds[0];
+    
   // Set up the file descriptors
   FD_ZERO(&x_read_fds);
-  FD_SET(i_control_read_fd, &x_read_fds);
-  px_full_ctx->x_ldb.i_evl_descriptor_limit = i_control_read_fd + 1;
+  FD_SET(px_full_ctx->x_ldb.i_evl_control_read_fd, &x_read_fds);
+  px_full_ctx->x_ldb.i_evl_descriptor_limit = px_full_ctx->x_ldb.i_evl_control_read_fd + 1;
   sem_post(&(px_full_ctx->x_ldb.x_evl_sem));
   
   while (u8_evl_running == LDB_TRUE)
@@ -106,14 +134,13 @@ static void* vLrtEventLoopBody(void* pv_arg_data)
     }
     if (i_select_res > 0)
     {
-      if (FD_ISSET(i_control_read_fd, &x_read_fds))
+      if (FD_ISSET(px_full_ctx->x_ldb.i_evl_control_read_fd, &x_read_fds))
       {
-        if (sizeof(u8_control) == read(i_control_read_fd, &u8_control, sizeof(u8_control)))
+        u8_read_control = u8LdbReadControl(px_full_ctx);
+
+        if (u8_read_control == LDB_CONTROL_TERMINATE)
         {
-          if (u8_control == LDB_CONTROL_TERMINATE)
-          {
-            u8_evl_running = LDB_FALSE;
-          }
+          u8_evl_running = LDB_FALSE;
         }
       }
     }
@@ -122,10 +149,10 @@ static void* vLrtEventLoopBody(void* pv_arg_data)
   return NULL;
 }
 
-static uint8_t u8LrtInitEventLoop(libruuvitag_context_type* px_full_ctx)
+static uint8_t u8LdbInitEventLoop(libruuvitag_context_type* px_full_ctx)
 {
   sem_init(&(px_full_ctx->x_ldb.x_evl_sem), 0, 0);
-  pthread_create(&(px_full_ctx->x_ldb.x_evl_thread), NULL, vLrtEventLoopBody, px_full_ctx);
+  pthread_create(&(px_full_ctx->x_ldb.x_evl_thread), NULL, vLdbEventLoopBody, px_full_ctx);
   sem_wait(&(px_full_ctx->x_ldb.x_evl_sem)); // Need to wait until thread up
 
   return LDB_SUCCESS;
@@ -134,7 +161,7 @@ static uint8_t u8LrtInitEventLoop(libruuvitag_context_type* px_full_ctx)
 
 uint8_t u8LrtInitLinuxDbusBluez(libruuvitag_context_type* px_full_ctx)
 {
-  u8LrtInitEventLoop(px_full_ctx);
+  u8LdbInitEventLoop(px_full_ctx);
   
   return LDB_SUCCESS;
 }
@@ -143,8 +170,7 @@ uint8_t u8LrtInitLinuxDbusBluez(libruuvitag_context_type* px_full_ctx)
 uint8_t u8LrtDeinitLinuxDbusBluez(libruuvitag_context_type* px_full_ctx)
 {
   // Write to control, then join
-  uint8_t u8_control = LDB_CONTROL_TERMINATE;
-  write(px_full_ctx->x_ldb.i_evl_control_write_fd, &u8_control, 1);
+  vLdbWriteControl(px_full_ctx, LDB_CONTROL_TERMINATE);
   pthread_join(px_full_ctx->x_ldb.x_evl_thread, NULL);
   
   return LDB_SUCCESS;
