@@ -29,8 +29,8 @@ libruuvitag_context_type* pxLibRuuviTagInit(char* s_listen_on_bt_adapters, char*
 
 #ifdef BACKEND_LINUX_DBUS_BLUEZ
   u8_backend_init_res = u8LrtInitLinuxDbusBluez(px_created_context);
-#endif // #ifdef BACKEND_LINUX_DBUS_BLUEZ
   if (u8_backend_init_res != LDB_SUCCESS)
+#endif // #ifdef BACKEND_LINUX_DBUS_BLUEZ
   {
     free(px_created_context);
 

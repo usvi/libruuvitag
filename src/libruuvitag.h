@@ -25,7 +25,7 @@ struct libruuvitag_context_type
 
   // Backend specific structures
 #ifdef BACKEND_LINUX_DBUS_BLUEZ
-  lrt_ldb_context_type x_ldb_context; // Linux Dbus Bluez
+  lrt_ldb_context_type x_ldb; // Linux Dbus Bluez
 #endif
 };
 
