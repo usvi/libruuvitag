@@ -77,6 +77,7 @@ static void* vLrtEventLoopBody(void* pv_arg_data)
   int i_control_read_fd;
   int i_select_res;
   uint8_t u8_control;
+  uint8_t u8_evl_running = LDB_TRUE;
 
   px_full_ctx = (libruuvitag_context_type*)pv_arg_data;
 
@@ -93,7 +94,7 @@ static void* vLrtEventLoopBody(void* pv_arg_data)
   px_full_ctx->x_ldb.i_evl_descriptor_limit = i_control_read_fd + 1;
   sem_post(&(px_full_ctx->x_ldb.x_evl_sem));
   
-  while (1)
+  while (u8_evl_running == LDB_TRUE)
   {
     sleep(1); // Just in case
     i_select_res = select(px_full_ctx->x_ldb.i_evl_descriptor_limit,
@@ -111,7 +112,7 @@ static void* vLrtEventLoopBody(void* pv_arg_data)
         {
           if (u8_control == LDB_CONTROL_TERMINATE)
           {
-            break;
+            u8_evl_running = LDB_FALSE;
           }
         }
       }
