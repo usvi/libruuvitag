@@ -30,7 +30,7 @@ static dbus_bool_t tLdbAddWatch(DBusWatch* px_watch, void* pv_arg_data)
   libruuvitag_context_type* px_full_ctx = NULL;
   unsigned int u_watch_flags;
 
-  printf("Watch added\n");
+  printf("Watch added with fd %d\n", dbus_watch_get_unix_fd(px_watch));
   px_full_ctx = (libruuvitag_context_type*)pv_arg_data;
   
   if (!dbus_watch_get_enabled(px_watch))
@@ -175,6 +175,38 @@ static uint8_t u8LdbReadControl(libruuvitag_context_type* px_full_ctx)
 }
 
 
+static void vFdsetsZero(libruuvitag_context_type* px_full_ctx,
+                        fd_set* px_fd_set_read,
+                        fd_set* px_fd_set_write)
+{
+  px_full_ctx->x_ldb.i_evl_descriptor_limit = 0;
+
+  if (px_fd_set_read)
+  {
+    FD_ZERO(px_fd_set_read);
+  }
+  if (px_fd_set_write)
+  {
+    FD_ZERO(px_fd_set_write);
+  }
+}
+
+
+static void vFdsetAdd(libruuvitag_context_type* px_full_ctx,
+                      fd_set* px_fd_set,
+                      int i_fd)
+{
+  if ((i_fd < 0) || (px_fd_set == NULL))
+  {
+    return;
+  }
+  FD_SET(i_fd, px_fd_set);
+
+  if ((i_fd + 1) > px_full_ctx->x_ldb.i_evl_descriptor_limit)
+  {
+    px_full_ctx->x_ldb.i_evl_descriptor_limit = i_fd + 1;
+  }
+}
 
 
 static void* vLdbEventLoopBody(void* pv_arg_data)
@@ -182,6 +214,9 @@ static void* vLdbEventLoopBody(void* pv_arg_data)
   libruuvitag_context_type* px_full_ctx = NULL;
   int ai_pipe_fds[2];
   fd_set x_read_fds;
+  fd_set x_write_fds;
+  // If I read docs correctly, exception fds are not needed.
+  // Strange that wpa_supplicant uses them. I am probably reading wrong.
   int i_select_res;
   uint8_t u8_evl_running = LDB_TRUE;
   uint8_t u8_read_control;
@@ -195,17 +230,22 @@ static void* vLdbEventLoopBody(void* pv_arg_data)
   px_full_ctx->x_ldb.i_evl_control_write_fd = ai_pipe_fds[1];
   px_full_ctx->x_ldb.i_evl_control_read_fd = ai_pipe_fds[0];
     
-  // Set up the file descriptors
   FD_ZERO(&x_read_fds);
+  FD_ZERO(&x_write_fds);
+  // Set up initially only the read file descriptor
+  /*
   FD_SET(px_full_ctx->x_ldb.i_evl_control_read_fd, &x_read_fds);
   px_full_ctx->x_ldb.i_evl_descriptor_limit = px_full_ctx->x_ldb.i_evl_control_read_fd + 1;
+  */
+  vFdsetAdd(px_full_ctx, &x_read_fds, px_full_ctx->x_ldb.i_evl_control_read_fd);
+  
   sem_post(&(px_full_ctx->x_ldb.x_evl_sem));
   
   while (u8_evl_running == LDB_TRUE)
   {
     sleep(1); // Just in case
     i_select_res = select(px_full_ctx->x_ldb.i_evl_descriptor_limit,
-                          &x_read_fds, NULL, NULL, NULL);
+                          &x_read_fds, &x_write_fds, NULL, NULL);
     
     if (i_select_res == -1)
     {
@@ -224,6 +264,10 @@ static void* vLdbEventLoopBody(void* pv_arg_data)
         else if (u8_read_control == LDB_CONTROL_DBUS_WATCHES)
         {
           printf("Reconfiguring watch fds\n");
+          vFdsetsZero(px_full_ctx, &x_read_fds, &x_write_fds);
+          vFdsetAdd(px_full_ctx, &x_read_fds, px_full_ctx->x_ldb.i_evl_control_read_fd);
+          vFdsetAdd(px_full_ctx, &x_read_fds, px_full_ctx->x_ldb.i_evl_watch_read_fd);
+          vFdsetAdd(px_full_ctx, &x_write_fds, px_full_ctx->x_ldb.i_evl_watch_write_fd);
         }
       }
     }
