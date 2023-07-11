@@ -244,8 +244,16 @@ static void* vLdbEventLoopBody(void* pv_arg_data)
   while (u8_evl_running == LDB_TRUE)
   {
     sleep(1); // Just in case
+    fd_set read_copy = x_read_fds;
+    fd_set write_copy = x_write_fds;
+
+    /*
     i_select_res = select(px_full_ctx->x_ldb.i_evl_descriptor_limit,
                           &x_read_fds, &x_write_fds, NULL, NULL);
+    */
+    
+    i_select_res = select(px_full_ctx->x_ldb.i_evl_descriptor_limit,
+                          &read_copy, &write_copy, NULL, NULL);
     
     if (i_select_res == -1)
     {
@@ -259,6 +267,7 @@ static void* vLdbEventLoopBody(void* pv_arg_data)
 
         if (u8_read_control == LDB_CONTROL_TERMINATE)
         {
+          printf("FALSE\n");
           u8_evl_running = LDB_FALSE;
         }
         else if (u8_read_control == LDB_CONTROL_DBUS_WATCHES)
@@ -269,6 +278,17 @@ static void* vLdbEventLoopBody(void* pv_arg_data)
           vFdsetAdd(px_full_ctx, &x_read_fds, px_full_ctx->x_ldb.i_evl_watch_read_fd);
           vFdsetAdd(px_full_ctx, &x_write_fds, px_full_ctx->x_ldb.i_evl_watch_write_fd);
         }
+      }
+      else if ((px_full_ctx->x_ldb.i_evl_watch_read_fd >= 0) &&
+               FD_ISSET(px_full_ctx->x_ldb.i_evl_watch_read_fd, &x_read_fds))
+      {
+        printf("Read fds\n");
+      }
+      else if ((px_full_ctx->x_ldb.i_evl_watch_write_fd >= 0) &&
+               FD_ISSET(px_full_ctx->x_ldb.i_evl_watch_write_fd, &x_write_fds))
+      {
+
+        printf("Write fds\n");
       }
     }
   }
