@@ -19,7 +19,81 @@ static DBusHandlerResult tInterfacesAltered(DBusConnection* px_dbus_conn,
 */
 
 
+static void vLdbWriteControl(libruuvitag_context_type* px_full_ctx, uint8_t u8_control_val)
+{
+  write(px_full_ctx->x_ldb.i_evl_control_write_fd, &u8_control_val, sizeof(u8_control_val));
+}
 
+
+static dbus_bool_t tLdbAddWatch(DBusWatch* px_watch, void* pv_arg_data)
+{
+  libruuvitag_context_type* px_full_ctx = NULL;
+  unsigned int u_watch_flags;
+
+  printf("Watch added\n");
+  px_full_ctx = (libruuvitag_context_type*)pv_arg_data;
+  
+  if (!dbus_watch_get_enabled(px_watch))
+  {
+    return TRUE;
+  }
+  u_watch_flags = dbus_watch_get_flags(px_watch);
+
+  if (u_watch_flags & DBUS_WATCH_READABLE)
+  {
+    px_full_ctx->x_ldb.i_evl_watch_read_fd = dbus_watch_get_unix_fd(px_watch);
+    vLdbWriteControl(px_full_ctx, LDB_CONTROL_DBUS_WATCHES);
+  }
+  if (u_watch_flags & DBUS_WATCH_WRITABLE)
+  {
+    px_full_ctx->x_ldb.i_evl_watch_write_fd = dbus_watch_get_unix_fd(px_watch);
+    vLdbWriteControl(px_full_ctx, LDB_CONTROL_DBUS_WATCHES);
+  }
+
+  return TRUE;
+}
+
+
+
+static void vLdbRemoveWatch(DBusWatch* px_watch, void* pv_arg_data)
+{
+  libruuvitag_context_type* px_full_ctx = NULL;
+  unsigned int u_watch_flags;
+
+  printf("Watch removed\n");
+  
+  px_full_ctx = (libruuvitag_context_type*)pv_arg_data;
+  u_watch_flags = dbus_watch_get_flags(px_watch);
+
+  if (u_watch_flags & DBUS_WATCH_READABLE)
+  {
+    px_full_ctx->x_ldb.i_evl_watch_read_fd = -1;
+    vLdbWriteControl(px_full_ctx, LDB_CONTROL_DBUS_WATCHES);
+  }
+  if (u_watch_flags & DBUS_WATCH_WRITABLE)
+  {
+    px_full_ctx->x_ldb.i_evl_watch_write_fd = -1;
+    vLdbWriteControl(px_full_ctx, LDB_CONTROL_DBUS_WATCHES);
+  }
+}
+
+
+static void vLdbToggleWatch(DBusWatch* px_watch, void* pv_arg_data)
+{
+  printf("Toggling watch\n");
+  
+  if (dbus_watch_get_enabled(px_watch))
+  {
+    tLdbAddWatch(px_watch, pv_arg_data);
+  }
+  else
+  {
+    vLdbRemoveWatch(px_watch, pv_arg_data);
+  }
+}
+
+
+  
 static uint8_t u8LdbInitIpc(libruuvitag_context_type* px_full_ctx)
 {
   DBusError x_error;
@@ -34,10 +108,7 @@ static uint8_t u8LdbInitIpc(libruuvitag_context_type* px_full_ctx)
 
     return LDB_FAIL;
   }
-  else
-  {
 
-  }
   if (px_full_ctx->x_ldb.px_dbus_conn)
   {
     printf("Bus succeeded\n");
@@ -59,7 +130,19 @@ static uint8_t u8LdbInitIpc(libruuvitag_context_type* px_full_ctx)
     {
       printf("Setting match has errored\n");
     }
-
+    if (dbus_connection_set_watch_functions(px_full_ctx->x_ldb.px_dbus_conn,
+                                            tLdbAddWatch,
+                                            vLdbRemoveWatch,
+                                            vLdbToggleWatch,
+                                            px_full_ctx,
+                                            NULL))
+    {
+      printf("Set watch succeeded\n");
+    }
+    else
+    {
+      printf("Set watch failed\n");
+    }
   }
   else
   {
@@ -78,7 +161,7 @@ static uint8_t u8LdbReadControl(libruuvitag_context_type* px_full_ctx)
                                  &u8_read_control, sizeof(u8_read_control)))
   {
     if ((u8_read_control == LDB_CONTROL_TERMINATE) ||
-        (u8_read_control == LDB_CONTROL_DBUS_RECONFIGURE))
+        (u8_read_control == LDB_CONTROL_DBUS_WATCHES))
     {
       ; // All ok
     }
@@ -92,10 +175,6 @@ static uint8_t u8LdbReadControl(libruuvitag_context_type* px_full_ctx)
 }
 
 
-static void vLdbWriteControl(libruuvitag_context_type* px_full_ctx, uint8_t u8_control_val)
-{
-  write(px_full_ctx->x_ldb.i_evl_control_write_fd, &u8_control_val, sizeof(u8_control_val));
-}
 
 
 static void* vLdbEventLoopBody(void* pv_arg_data)
@@ -142,6 +221,10 @@ static void* vLdbEventLoopBody(void* pv_arg_data)
         {
           u8_evl_running = LDB_FALSE;
         }
+        else if (u8_read_control == LDB_CONTROL_DBUS_WATCHES)
+        {
+          printf("Reconfiguring watch fds\n");
+        }
       }
     }
   }
@@ -151,17 +234,29 @@ static void* vLdbEventLoopBody(void* pv_arg_data)
 
 static uint8_t u8LdbInitEventLoop(libruuvitag_context_type* px_full_ctx)
 {
-  sem_init(&(px_full_ctx->x_ldb.x_evl_sem), 0, 0);
   pthread_create(&(px_full_ctx->x_ldb.x_evl_thread), NULL, vLdbEventLoopBody, px_full_ctx);
   sem_wait(&(px_full_ctx->x_ldb.x_evl_sem)); // Need to wait until thread up
 
   return LDB_SUCCESS;
 }
 
+static uint8_t u8LdbInitLocalContext(libruuvitag_context_type* px_full_ctx)
+{
+  px_full_ctx->x_ldb.i_evl_control_write_fd = -1;
+  px_full_ctx->x_ldb.i_evl_control_read_fd = -1;
+  px_full_ctx->x_ldb.i_evl_watch_write_fd = -1;
+  px_full_ctx->x_ldb.i_evl_watch_read_fd = -1;
+  px_full_ctx->x_ldb.i_evl_descriptor_limit = 0;
+  sem_init(&(px_full_ctx->x_ldb.x_evl_sem), 0, 0);
+  
+  return LDB_SUCCESS;
+}
 
 uint8_t u8LrtInitLinuxDbusBluez(libruuvitag_context_type* px_full_ctx)
 {
+  u8LdbInitLocalContext(px_full_ctx);
   u8LdbInitEventLoop(px_full_ctx);
+  u8LdbInitIpc(px_full_ctx);
   
   return LDB_SUCCESS;
 }

@@ -21,6 +21,8 @@ struct lrt_ldb_context_type
 
   int i_evl_control_write_fd;
   int i_evl_control_read_fd;
+  int i_evl_watch_write_fd;
+  int i_evl_watch_read_fd;
   int i_evl_descriptor_limit;
   sem_t x_evl_sem;
   pthread_t x_evl_thread;
@@ -42,7 +44,7 @@ struct lrt_ldb_context_type
 
 #define LDB_CONTROL_ERROR             (0)
 #define LDB_CONTROL_TERMINATE         (1)
-#define LDB_CONTROL_DBUS_RECONFIGURE  (2)
+#define LDB_CONTROL_DBUS_WATCHES      (2)
 
 
 // Function prototypes
