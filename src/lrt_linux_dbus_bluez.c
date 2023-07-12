@@ -42,11 +42,13 @@ static dbus_bool_t tLdbAddWatch(DBusWatch* px_watch, void* pv_arg_data)
   if (u_watch_flags & DBUS_WATCH_READABLE)
   {
     px_full_ctx->x_ldb.i_evl_watch_read_fd = dbus_watch_get_unix_fd(px_watch);
+    px_full_ctx->x_ldb.px_read_watch = px_watch;
     vLdbWriteControl(px_full_ctx, LDB_CONTROL_DBUS_WATCHES);
   }
   if (u_watch_flags & DBUS_WATCH_WRITABLE)
   {
     px_full_ctx->x_ldb.i_evl_watch_write_fd = dbus_watch_get_unix_fd(px_watch);
+    px_full_ctx->x_ldb.px_write_watch = px_watch;
     vLdbWriteControl(px_full_ctx, LDB_CONTROL_DBUS_WATCHES);
   }
 
@@ -68,11 +70,13 @@ static void vLdbRemoveWatch(DBusWatch* px_watch, void* pv_arg_data)
   if (u_watch_flags & DBUS_WATCH_READABLE)
   {
     px_full_ctx->x_ldb.i_evl_watch_read_fd = -1;
+    px_full_ctx->x_ldb.px_read_watch = NULL;
     vLdbWriteControl(px_full_ctx, LDB_CONTROL_DBUS_WATCHES);
   }
   if (u_watch_flags & DBUS_WATCH_WRITABLE)
   {
     px_full_ctx->x_ldb.i_evl_watch_write_fd = -1;
+    px_full_ctx->x_ldb.px_write_watch = NULL;
     vLdbWriteControl(px_full_ctx, LDB_CONTROL_DBUS_WATCHES);
   }
 }
@@ -244,16 +248,17 @@ static void* vLdbEventLoopBody(void* pv_arg_data)
   while (u8_evl_running == LDB_TRUE)
   {
     sleep(1); // Just in case
-    fd_set read_copy = x_read_fds;
-    fd_set write_copy = x_write_fds;
 
-    /*
+    
+    vFdsetsZero(px_full_ctx, &x_read_fds, &x_write_fds);
+    vFdsetAdd(px_full_ctx, &x_read_fds, px_full_ctx->x_ldb.i_evl_control_read_fd);
+    vFdsetAdd(px_full_ctx, &x_read_fds, px_full_ctx->x_ldb.i_evl_watch_read_fd);
+    vFdsetAdd(px_full_ctx, &x_write_fds, px_full_ctx->x_ldb.i_evl_watch_write_fd);
+          
+
     i_select_res = select(px_full_ctx->x_ldb.i_evl_descriptor_limit,
                           &x_read_fds, &x_write_fds, NULL, NULL);
-    */
-    
-    i_select_res = select(px_full_ctx->x_ldb.i_evl_descriptor_limit,
-                          &read_copy, &write_copy, NULL, NULL);
+
     
     if (i_select_res == -1)
     {
@@ -273,10 +278,6 @@ static void* vLdbEventLoopBody(void* pv_arg_data)
         else if (u8_read_control == LDB_CONTROL_DBUS_WATCHES)
         {
           printf("Reconfiguring watch fds\n");
-          vFdsetsZero(px_full_ctx, &x_read_fds, &x_write_fds);
-          vFdsetAdd(px_full_ctx, &x_read_fds, px_full_ctx->x_ldb.i_evl_control_read_fd);
-          vFdsetAdd(px_full_ctx, &x_read_fds, px_full_ctx->x_ldb.i_evl_watch_read_fd);
-          vFdsetAdd(px_full_ctx, &x_write_fds, px_full_ctx->x_ldb.i_evl_watch_write_fd);
         }
       }
       else if ((px_full_ctx->x_ldb.i_evl_watch_read_fd >= 0) &&

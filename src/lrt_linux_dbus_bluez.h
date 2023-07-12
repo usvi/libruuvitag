@@ -23,6 +23,8 @@ struct lrt_ldb_context_type
   int i_evl_control_read_fd;
   int i_evl_watch_write_fd;
   int i_evl_watch_read_fd;
+  DBusWatch* px_write_watch;
+  DBusWatch* px_read_watch;
   int i_evl_descriptor_limit;
   sem_t x_evl_sem;
   pthread_t x_evl_thread;
