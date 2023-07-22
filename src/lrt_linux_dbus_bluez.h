@@ -20,6 +20,7 @@ struct lrt_ldb_watch
   DBusWatchFlags e_watch_type;
   dbus_bool_t t_enabled;
   int i_watch_fd;
+  DBusWatch* px_dbus_watch;
   lrt_ldb_watch* px_next_watch;
 };
 
@@ -33,7 +34,7 @@ struct lrt_ldb_context_type
   sem_t x_evl_sem;
   pthread_t x_evl_thread;
 
-  lrt_ldb_watch* px_dbus_watches;
+  lrt_ldb_watch* px_event_watches;
 };
 
 

@@ -27,35 +27,35 @@ static void vLdbWriteControl(libruuvitag_context_type* px_full_ctx, uint8_t u8_c
 }
 
 
-static dbus_bool_t tLdbAddWatch(DBusWatch* px_param_watch, void* pv_arg_data)
+static dbus_bool_t tLdbAddWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
 {
   libruuvitag_context_type* px_full_ctx = NULL;
-  lrt_ldb_watch* px_dbus_watch = NULL;
-  lrt_ldb_watch* px_dbus_watch_last = NULL;
-  lrt_ldb_watch* px_dbus_new_watch = NULL;
+  lrt_ldb_watch* px_event_watch = NULL;
+  lrt_ldb_watch* px_event_watch_last = NULL;
+  lrt_ldb_watch* px_event_new_watch = NULL;
   void* pv_malloc_test = NULL;
 
   px_full_ctx = (libruuvitag_context_type*)pv_arg_data;
   
-  if (!dbus_watch_get_enabled(px_param_watch))
+  if (!dbus_watch_get_enabled(px_dbus_watch))
   {
     return TRUE;
   }
-  printf("Watch added with fd %d\n", dbus_watch_get_unix_fd(px_param_watch));
+  printf("Watch added with fd %d\n", dbus_watch_get_unix_fd(px_dbus_watch));
 
   // Check first if they exist in the list for some reason
-  px_dbus_watch = px_full_ctx->x_ldb.px_dbus_watches;
+  px_event_watch = px_full_ctx->x_ldb.px_event_watches;
   
-  while (px_dbus_watch != NULL)
+  while (px_event_watch != NULL)
   {
-    if (px_dbus_watch->e_watch_type == dbus_watch_get_flags(px_param_watch))
+    if (px_event_watch->e_watch_type == dbus_watch_get_flags(px_dbus_watch))
     {
       // Not updating fds, etc. Should be already.
       return TRUE;
     }
     // Moving on
-    px_dbus_watch_last = px_dbus_watch;
-    px_dbus_watch = px_dbus_watch->px_next_watch;
+    px_event_watch_last = px_event_watch;
+    px_event_watch = px_event_watch->px_next_watch;
   }
   // Need to add new.
   pv_malloc_test = malloc(sizeof(lrt_ldb_watch));
@@ -64,23 +64,24 @@ static dbus_bool_t tLdbAddWatch(DBusWatch* px_param_watch, void* pv_arg_data)
   {
     return FALSE;
   }
-  px_dbus_new_watch = (lrt_ldb_watch*)(pv_malloc_test);
-  px_dbus_new_watch->e_watch_type = dbus_watch_get_flags(px_param_watch);
-  px_dbus_new_watch->i_watch_fd = dbus_watch_get_unix_fd(px_param_watch);
-  px_dbus_new_watch->px_next_watch = NULL;
+  px_event_new_watch = (lrt_ldb_watch*)(pv_malloc_test);
+  px_event_new_watch->e_watch_type = dbus_watch_get_flags(px_dbus_watch);
+  px_event_new_watch->i_watch_fd = dbus_watch_get_unix_fd(px_dbus_watch);
+  px_event_new_watch->px_dbus_watch = px_dbus_watch;
+  px_event_new_watch->px_next_watch = NULL;
   
-  if (px_dbus_watch_last == NULL)
+  if (px_event_watch_last == NULL)
   {
     // To be added as first
-    px_full_ctx->x_ldb.px_dbus_watches = px_dbus_new_watch;
+    px_full_ctx->x_ldb.px_event_watches = px_event_new_watch;
   }
   else
   {
     // To be added as last
-    px_dbus_watch_last->px_next_watch = px_dbus_new_watch;
+    px_event_watch_last->px_next_watch = px_event_new_watch;
   }
   // Finally enable
-  px_dbus_new_watch->t_enabled = TRUE;
+  px_event_new_watch->t_enabled = TRUE;
   vLdbWriteControl(px_full_ctx, LDB_CONTROL_DBUS_WATCHES);
 
   return TRUE;
@@ -88,31 +89,31 @@ static dbus_bool_t tLdbAddWatch(DBusWatch* px_param_watch, void* pv_arg_data)
 
 
 
-static void vLdbRemoveWatch(DBusWatch* px_param_watch, void* pv_arg_data)
+static void vLdbRemoveWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
 {
   libruuvitag_context_type* px_full_ctx = NULL;
-  lrt_ldb_watch* px_dbus_watch = NULL;
-  lrt_ldb_watch* px_dbus_watch_last = NULL;
+  lrt_ldb_watch* px_event_watch = NULL;
+  lrt_ldb_watch* px_event_watch_last = NULL;
 
   printf("Watch removed\n");
   
   px_full_ctx = (libruuvitag_context_type*)pv_arg_data;
-  px_dbus_watch = px_full_ctx->x_ldb.px_dbus_watches;
+  px_event_watch = px_full_ctx->x_ldb.px_event_watches;
   
-  while (px_dbus_watch != NULL)
+  while (px_event_watch != NULL)
   {
-    if (px_dbus_watch->e_watch_type == dbus_watch_get_flags(px_param_watch))
+    if (px_event_watch->e_watch_type == dbus_watch_get_flags(px_dbus_watch))
     {
       // Found, just now need to remove it
-      if (px_dbus_watch_last == NULL)
+      if (px_event_watch_last == NULL)
       {
         // We are removing head
-        px_full_ctx->x_ldb.px_dbus_watches->px_next_watch = px_dbus_watch->px_next_watch;
+        px_full_ctx->x_ldb.px_event_watches->px_next_watch = px_event_watch->px_next_watch;
       }
       else
       {
         // We are removing from middle
-        px_dbus_watch_last->px_next_watch = px_dbus_watch->px_next_watch;
+        px_event_watch_last->px_next_watch = px_event_watch->px_next_watch;
       }
       // Actual free
       free(px_full_ctx);
@@ -121,40 +122,40 @@ static void vLdbRemoveWatch(DBusWatch* px_param_watch, void* pv_arg_data)
       return;
     }
     // Still here, so not found
-    px_dbus_watch_last = px_dbus_watch;
-    px_dbus_watch = px_dbus_watch->px_next_watch;
+    px_event_watch_last = px_event_watch;
+    px_event_watch = px_event_watch->px_next_watch;
   }
 
   return;
 }
 
 
-static void vLdbToggleWatch(DBusWatch* px_param_watch, void* pv_arg_data)
+static void vLdbToggleWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
 {
   libruuvitag_context_type* px_full_ctx = NULL;
-  lrt_ldb_watch* px_dbus_watch = NULL;
+  lrt_ldb_watch* px_event_watch = NULL;
 
   printf("Watch toggled\n");
   
   px_full_ctx = (libruuvitag_context_type*)pv_arg_data;
-  px_dbus_watch = px_full_ctx->x_ldb.px_dbus_watches;
+  px_event_watch = px_full_ctx->x_ldb.px_event_watches;
   
-  while (px_dbus_watch != NULL)
+  while (px_event_watch != NULL)
   {
-    if (px_dbus_watch->e_watch_type == dbus_watch_get_flags(px_param_watch))
+    if (px_event_watch->e_watch_type == dbus_watch_get_flags(px_dbus_watch))
     {
       // Found
       // Togling if different
-      if ((px_dbus_watch->t_enabled) != (dbus_watch_get_enabled(px_param_watch)))
+      if ((px_event_watch->t_enabled) != (dbus_watch_get_enabled(px_dbus_watch)))
       {
-        px_dbus_watch->t_enabled = dbus_watch_get_enabled(px_param_watch);
+        px_event_watch->t_enabled = dbus_watch_get_enabled(px_dbus_watch);
         vLdbWriteControl(px_full_ctx, LDB_CONTROL_DBUS_WATCHES);
 
         return;
       }
     }
     // Still here, so not found
-    px_dbus_watch = px_dbus_watch->px_next_watch;
+    px_event_watch = px_event_watch->px_next_watch;
   }
 
   return;
@@ -280,7 +281,7 @@ static void vFdsetAdd(fd_set* px_fd_set,
 static void* vLdbEventLoopBody(void* pv_arg_data)
 {
   libruuvitag_context_type* px_full_ctx = NULL;
-  lrt_ldb_watch* px_dbus_watch = NULL;
+  lrt_ldb_watch* px_event_watch = NULL;
   int ai_pipe_fds[2];
   fd_set x_read_fds;
   fd_set x_write_fds;
@@ -310,19 +311,19 @@ static void* vLdbEventLoopBody(void* pv_arg_data)
     vFdsetAdd(&x_read_fds, px_full_ctx->x_ldb.i_evl_control_read_fd, &i_descriptor_limit);
 
     // Set available watches
-    px_dbus_watch = px_full_ctx->x_ldb.px_dbus_watches;
+    px_event_watch = px_full_ctx->x_ldb.px_event_watches;
 
-    while (px_dbus_watch != NULL)
+    while (px_event_watch != NULL)
     {
-      if (px_dbus_watch->e_watch_type == DBUS_WATCH_READABLE)
+      if (px_event_watch->e_watch_type == DBUS_WATCH_READABLE)
       {
-        vFdsetAdd(&x_read_fds, px_dbus_watch->i_watch_fd, &i_descriptor_limit);
+        vFdsetAdd(&x_read_fds, px_event_watch->i_watch_fd, &i_descriptor_limit);
       }
-      else if (px_dbus_watch->e_watch_type == DBUS_WATCH_WRITABLE)
+      else if (px_event_watch->e_watch_type == DBUS_WATCH_WRITABLE)
       {
-        vFdsetAdd(&x_write_fds, px_dbus_watch->i_watch_fd, &i_descriptor_limit);
+        vFdsetAdd(&x_write_fds, px_event_watch->i_watch_fd, &i_descriptor_limit);
       }
-      px_dbus_watch = px_dbus_watch->px_next_watch;
+      px_event_watch = px_event_watch->px_next_watch;
     }
 
     // Wait for happening
@@ -353,26 +354,26 @@ static void* vLdbEventLoopBody(void* pv_arg_data)
       }
 
       // Actual checks
-      px_dbus_watch = px_full_ctx->x_ldb.px_dbus_watches;
+      px_event_watch = px_full_ctx->x_ldb.px_event_watches;
 
-      while (px_dbus_watch != NULL)
+      while (px_event_watch != NULL)
       {
-        if (px_dbus_watch->e_watch_type == DBUS_WATCH_READABLE)
+        if (px_event_watch->e_watch_type == DBUS_WATCH_READABLE)
         {
-          if (FD_ISSET(px_dbus_watch->i_watch_fd, &x_read_fds))
+          if (FD_ISSET(px_event_watch->i_watch_fd, &x_read_fds))
           {
             printf("Read fds\n");
           }
         }
-        else if (px_dbus_watch->e_watch_type == DBUS_WATCH_WRITABLE)
+        else if (px_event_watch->e_watch_type == DBUS_WATCH_WRITABLE)
         {
-          if (FD_ISSET(px_dbus_watch->i_watch_fd, &x_write_fds))
+          if (FD_ISSET(px_event_watch->i_watch_fd, &x_write_fds))
           {
             printf("Write fds\n");
           }
         }
         // Get next
-        px_dbus_watch = px_dbus_watch->px_next_watch;
+        px_event_watch = px_event_watch->px_next_watch;
       }
     }
   }
@@ -392,7 +393,7 @@ static uint8_t u8LdbInitLocalContext(libruuvitag_context_type* px_full_ctx)
 {
   px_full_ctx->x_ldb.i_evl_control_write_fd = -1;
   px_full_ctx->x_ldb.i_evl_control_read_fd = -1;
-  px_full_ctx->x_ldb.px_dbus_watches = NULL;
+  px_full_ctx->x_ldb.px_event_watches = NULL;
   sem_init(&(px_full_ctx->x_ldb.x_evl_sem), 0, 0);
   
   return LDB_SUCCESS;
