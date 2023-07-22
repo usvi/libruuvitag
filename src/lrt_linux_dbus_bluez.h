@@ -13,6 +13,15 @@
 // happy and at the same time define strictly the dbus-
 // related stuff here.
 typedef struct lrt_ldb_context_type lrt_ldb_context_type;
+typedef struct lrt_ldb_watch lrt_ldb_watch;
+
+struct lrt_ldb_watch
+{
+  DBusWatchFlags e_watch_type;
+  dbus_bool_t t_enabled;
+  int i_watch_fd;
+  lrt_ldb_watch* px_next_watch;
+};
 
 struct lrt_ldb_context_type
 {
@@ -21,13 +30,10 @@ struct lrt_ldb_context_type
 
   int i_evl_control_write_fd;
   int i_evl_control_read_fd;
-  int i_evl_watch_write_fd;
-  int i_evl_watch_read_fd;
-  DBusWatch* px_write_watch;
-  DBusWatch* px_read_watch;
-  int i_evl_descriptor_limit;
   sem_t x_evl_sem;
   pthread_t x_evl_thread;
+
+  lrt_ldb_watch* px_dbus_watches;
 };
 
 
