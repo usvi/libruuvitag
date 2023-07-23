@@ -14,6 +14,7 @@
 // related stuff here.
 typedef struct lrt_ldb_context_type lrt_ldb_context_type;
 typedef struct lrt_ldb_watch lrt_ldb_watch;
+typedef struct lrt_ldb_timeout lrt_ldb_timeout;
 
 struct lrt_ldb_watch
 {
@@ -22,6 +23,15 @@ struct lrt_ldb_watch
   int i_watch_fd;
   DBusWatch* px_dbus_watch;
   lrt_ldb_watch* px_next_watch;
+};
+
+struct lrt_ldb_timeout
+{
+  dbus_bool_t t_enabled;
+  struct timeval x_interval;
+  struct timeval x_next_deadline;
+  DBusTimeout* px_dbus_timeout;
+  lrt_ldb_timeout* px_next_timeout;
 };
 
 struct lrt_ldb_context_type
@@ -35,6 +45,7 @@ struct lrt_ldb_context_type
   pthread_t x_evl_thread;
 
   lrt_ldb_watch* px_event_watches;
+  lrt_ldb_timeout* px_event_timeouts;
 };
 
 
