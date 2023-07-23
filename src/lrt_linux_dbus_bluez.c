@@ -353,7 +353,7 @@ static uint8_t u8LdbInitDbus(libruuvitag_context_type* px_full_ctx)
     dbus_connection_add_filter(px_full_ctx->x_ldb.px_dbus_conn,
                                tInterfacesAltered, px_full_ctx, NULL);
     */
-    printf("Adding signal match\n");
+    printf("Adding signal matches\n");
     dbus_bus_add_match(px_full_ctx->x_ldb.px_dbus_conn,
                        "type='signal',"
                        "interface='org.freedesktop.DBus.ObjectManager',"
@@ -366,7 +366,27 @@ static uint8_t u8LdbInitDbus(libruuvitag_context_type* px_full_ctx)
     if (dbus_error_is_set(&x_error))
     {
       printf("Setting match has errored\n");
+      dbus_error_free(&x_error);
+      dbus_error_init(&x_error);
     }
+    dbus_bus_add_match(px_full_ctx->x_ldb.px_dbus_conn,
+                       "type='signal',"
+                       "interface='org.freedesktop.DBus.ObjectManager',"
+                       "member='InterfacesRemoved',"
+                       "path='/'",
+                       &x_error);
+    dbus_connection_flush(px_full_ctx->x_ldb.px_dbus_conn);
+    printf("Flush succeeded\n");
+
+    if (dbus_error_is_set(&x_error))
+    {
+      printf("Setting match has errored\n");
+      dbus_error_free(&x_error);
+    }
+
+
+
+    
     if (dbus_connection_set_watch_functions(px_full_ctx->x_ldb.px_dbus_conn,
                                             tLdbAddWatch,
                                             vLdbRemoveWatch,
