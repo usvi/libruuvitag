@@ -65,6 +65,7 @@ struct lrt_ldb_context_type
 #define LDB_CONTROL_ERROR             (0)
 #define LDB_CONTROL_TERMINATE         (1)
 #define LDB_CONTROL_DBUS_WATCHES      (2)
+#define LDB_CONTROL_DBUS_TIMEOUTS     (3)
 
 
 // Function prototypes

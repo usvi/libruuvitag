@@ -4,7 +4,12 @@
 #include <unistd.h>
 #include <stdlib.h>
 
+#include <sys/time.h>
 #include <dbus/dbus.h>
+
+
+#define NUM_MS_IN_S   (1000)
+#define NUM_US_IN_MS  (1000)
 
 
 /*
@@ -41,14 +46,14 @@ static dbus_bool_t tLdbAddWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
   {
     return TRUE;
   }
-  printf("Watch added with fd %d\n", dbus_watch_get_unix_fd(px_dbus_watch));
+  printf("Enabled watch add called\n");
 
   // Check first if they exist in the list for some reason
   px_event_watch_iterator = px_full_ctx->x_ldb.px_event_watches;
   
   while (px_event_watch_iterator != NULL)
   {
-    if (px_event_watch_iterator->e_watch_type == dbus_watch_get_flags(px_dbus_watch))
+    if (px_event_watch_iterator->px_dbus_watch == px_dbus_watch)
     {
       // Not updating fds, etc. Should be already.
       return TRUE;
@@ -88,21 +93,20 @@ static dbus_bool_t tLdbAddWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
 }
 
 
-
 static void vLdbRemoveWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
 {
   libruuvitag_context_type* px_full_ctx = NULL;
   lrt_ldb_watch* px_event_watch_iterator = NULL;
   lrt_ldb_watch* px_event_watch_last = NULL;
-
-  printf("Watch removed\n");
   
   px_full_ctx = (libruuvitag_context_type*)pv_arg_data;
   px_event_watch_iterator = px_full_ctx->x_ldb.px_event_watches;
   
+  printf("Watch remove called\n");
+  
   while (px_event_watch_iterator != NULL)
   {
-    if (px_event_watch_iterator->e_watch_type == dbus_watch_get_flags(px_dbus_watch))
+    if (px_event_watch_iterator->px_dbus_watch == px_dbus_watch)
     {
       // Found, just now need to remove it
       if (px_event_watch_last == NULL)
@@ -116,7 +120,7 @@ static void vLdbRemoveWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
         px_event_watch_last->px_next_watch = px_event_watch_iterator->px_next_watch;
       }
       // Actual free
-      free(px_full_ctx);
+      free(px_event_watch_iterator);
       vLdbWriteControl(px_full_ctx, LDB_CONTROL_DBUS_WATCHES);
 
       return;
@@ -135,14 +139,14 @@ static void vLdbToggleWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
   libruuvitag_context_type* px_full_ctx = NULL;
   lrt_ldb_watch* px_event_watch_iterator = NULL;
 
-  printf("Watch toggled\n");
+  printf("Watch toggle called\n");
   
   px_full_ctx = (libruuvitag_context_type*)pv_arg_data;
   px_event_watch_iterator = px_full_ctx->x_ldb.px_event_watches;
   
   while (px_event_watch_iterator != NULL)
   {
-    if (px_event_watch_iterator->e_watch_type == dbus_watch_get_flags(px_dbus_watch))
+    if (px_event_watch_iterator->px_dbus_watch == px_dbus_watch)
     {
       // Found
       // Togling if different
@@ -162,8 +166,172 @@ static void vLdbToggleWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
 }
 
 
+static dbus_bool_t tLdbAddTimeout(DBusTimeout* px_dbus_timeout, void* pv_arg_data)
+{
+  libruuvitag_context_type* px_full_ctx = NULL;
+  lrt_ldb_timeout* px_event_timeout_iterator = NULL;
+  lrt_ldb_timeout* px_event_timeout_last = NULL;
+  lrt_ldb_timeout* px_event_timeout_new = NULL;
+  void* pv_malloc_test = NULL;
+  struct timeval x_time_now;
+
+  px_full_ctx = (libruuvitag_context_type*)pv_arg_data;
   
-static uint8_t u8LdbInitIpc(libruuvitag_context_type* px_full_ctx)
+  if (!dbus_timeout_get_enabled(px_dbus_timeout))
+  {
+    return TRUE;
+  }
+  printf("Enabled timeout add called\n");
+
+  // Check first if they exist in the list for some reason
+  px_event_timeout_iterator = px_full_ctx->x_ldb.px_event_timeouts;
+  
+  while (px_event_timeout_iterator != NULL)
+  {
+    if (px_event_timeout_iterator->px_dbus_timeout == px_dbus_timeout)
+    {
+      break;
+    }
+    // Moving on
+    px_event_timeout_last = px_event_timeout_iterator;
+    px_event_timeout_iterator = px_event_timeout_iterator->px_next_timeout;
+  }
+
+  if (px_event_timeout_iterator == NULL)
+  {
+    // Need to add new.
+    pv_malloc_test = malloc(sizeof(lrt_ldb_timeout));
+
+    if (pv_malloc_test == NULL)
+    {
+      return FALSE;
+    }
+    px_event_timeout_new = (lrt_ldb_timeout*)(pv_malloc_test);
+    px_event_timeout_new->px_dbus_timeout = px_dbus_timeout;
+    px_event_timeout_new->px_next_timeout = NULL;
+
+    // Assing impartially
+    if (px_full_ctx->x_ldb.px_event_timeouts == NULL)
+    {
+      // Need to add as first to list
+      px_full_ctx->x_ldb.px_event_timeouts = px_event_timeout_new;
+    }
+    else
+    {
+      // Need to add as last
+      px_event_timeout_last->px_next_timeout = px_event_timeout_new;
+    }
+    // Lets make iterator to point to the newest add for some synergies
+    px_event_timeout_iterator = px_event_timeout_new;
+  }
+  // px_event_timeout_iterator is now proper, we can do now stuff
+  px_event_timeout_iterator->t_enabled = FALSE; // Just in case for a short file
+  px_event_timeout_iterator->x_interval.tv_sec =
+    (dbus_timeout_get_interval(px_dbus_timeout) / NUM_MS_IN_S);
+  px_event_timeout_iterator->x_interval.tv_usec =
+    ((dbus_timeout_get_interval(px_dbus_timeout) % NUM_MS_IN_S) *
+     NUM_US_IN_MS);
+  gettimeofday(&(x_time_now), NULL);
+  timeradd(&(px_event_timeout_iterator->x_interval), &x_time_now,
+           &(px_event_timeout_iterator->x_next_deadline));
+  // Finally enable
+  px_event_timeout_iterator->t_enabled = TRUE;
+  vLdbWriteControl(px_full_ctx, LDB_CONTROL_DBUS_TIMEOUTS);
+
+  return TRUE;
+}
+
+
+static void vLdbRemoveTimeout(DBusTimeout* px_dbus_timeout, void* pv_arg_data)
+{
+  libruuvitag_context_type* px_full_ctx = NULL;
+  lrt_ldb_timeout* px_event_timeout_iterator = NULL;
+  lrt_ldb_timeout* px_event_timeout_last = NULL;
+
+  px_full_ctx = (libruuvitag_context_type*)pv_arg_data;
+
+  printf("Timeout remove called\n");
+  
+  while (px_event_timeout_iterator != NULL)
+  {
+    if (px_event_timeout_iterator->px_dbus_timeout == px_dbus_timeout)
+    {
+      // Found, just now need to remove it
+      if (px_event_timeout_last == NULL)
+      {
+        // We are removing head
+        px_full_ctx->x_ldb.px_event_timeouts->px_next_timeout = px_event_timeout_iterator->px_next_timeout;
+      }
+      else
+      {
+        // We are removing from middle
+        px_event_timeout_last->px_next_timeout = px_event_timeout_iterator->px_next_timeout;
+      }
+      // Actual free
+      free(px_event_timeout_iterator);
+      vLdbWriteControl(px_full_ctx, LDB_CONTROL_DBUS_TIMEOUTS);
+      
+      return;
+    }
+    // Moving on
+    px_event_timeout_last = px_event_timeout_iterator;
+    px_event_timeout_iterator = px_event_timeout_iterator->px_next_timeout;
+  }
+
+
+  return;
+}
+
+
+static void vLdbToggleTimeout(DBusTimeout* px_dbus_timeout, void* pv_arg_data)
+{
+  libruuvitag_context_type* px_full_ctx = NULL;
+  lrt_ldb_timeout* px_event_timeout_iterator = NULL;
+  struct timeval x_time_now;
+
+  px_full_ctx = (libruuvitag_context_type*)pv_arg_data;
+
+  printf("Timeout toggle called\n");
+  
+  while (px_event_timeout_iterator != NULL)
+  {
+    if (px_event_timeout_iterator->px_dbus_timeout == px_dbus_timeout)
+    {
+      // Found
+      // Toggling if different
+      if ((px_event_timeout_iterator->t_enabled) != (dbus_timeout_get_enabled(px_dbus_timeout)))
+      {
+        if (dbus_timeout_get_enabled(px_dbus_timeout) == TRUE)
+        {
+          // Need to set the whole thing
+          px_event_timeout_iterator->x_interval.tv_sec =
+            (dbus_timeout_get_interval(px_dbus_timeout) / NUM_MS_IN_S);
+          px_event_timeout_iterator->x_interval.tv_usec =
+            ((dbus_timeout_get_interval(px_dbus_timeout) % NUM_MS_IN_S) *
+             NUM_US_IN_MS);
+          gettimeofday(&(x_time_now), NULL);
+          timeradd(&(px_event_timeout_iterator->x_interval), &x_time_now,
+                   &(px_event_timeout_iterator->x_next_deadline));
+          // Finally enable
+          px_event_timeout_iterator->t_enabled = TRUE;
+        }
+        else
+        {
+          px_event_timeout_iterator->t_enabled = FALSE;
+        }
+        vLdbWriteControl(px_full_ctx, LDB_CONTROL_DBUS_TIMEOUTS);
+      }
+      return;
+    }
+    // Still here, so not found
+    px_event_timeout_iterator = px_event_timeout_iterator->px_next_timeout;
+  }
+
+  return;
+}
+
+
+static uint8_t u8LdbInitDbus(libruuvitag_context_type* px_full_ctx)
 {
   DBusError x_error;
 
@@ -212,6 +380,21 @@ static uint8_t u8LdbInitIpc(libruuvitag_context_type* px_full_ctx)
     {
       printf("Set watch failed\n");
     }
+    /*
+    if (dbus_connection_set_timeout_functions(px_full_ctx->x_ldb.px_dbus_conn,
+                                              tLdbAddTimeout,
+                                              vLdbRemoveTimeout,
+                                              vLdbToggleTimeout,
+                                              px_full_ctx,
+                                              NULL))
+    {
+      printf("Set timeout succeeded\n");
+    }
+    else
+    {
+      printf("Set timeout failed\n");
+    }
+    //*/
   }
   else
   {
@@ -230,7 +413,8 @@ static uint8_t u8LdbReadControl(libruuvitag_context_type* px_full_ctx)
                                  &u8_read_control, sizeof(u8_read_control)))
   {
     if ((u8_read_control == LDB_CONTROL_TERMINATE) ||
-        (u8_read_control == LDB_CONTROL_DBUS_WATCHES))
+        (u8_read_control == LDB_CONTROL_DBUS_WATCHES) ||
+        (u8_read_control == LDB_CONTROL_DBUS_TIMEOUTS))
     {
       ; // All ok
     }
@@ -349,7 +533,12 @@ static void* vLdbEventLoopBody(void* pv_arg_data)
         else if (u8_read_control == LDB_CONTROL_DBUS_WATCHES)
         {
           // Basically just reloop
-          printf("Reconfiguring watch fds\n");
+          printf("Reconfiguring watches in event loop\n");
+        }
+        else if (u8_read_control == LDB_CONTROL_DBUS_TIMEOUTS)
+        {
+          // Basically just reloop
+          printf("Reconfiguring timeouts in event loop\n");
         }
       }
 
@@ -363,7 +552,7 @@ static void* vLdbEventLoopBody(void* pv_arg_data)
           if (FD_ISSET(px_event_watch_iterator->i_watch_fd, &x_read_fds))
           {
             printf("Read fds, handling\n");
-            //dbus_watch_handle(px_event_watch_iterator->px_dbus_watch, DBUS_WATCH_READABLE);
+            dbus_watch_handle(px_event_watch_iterator->px_dbus_watch, DBUS_WATCH_READABLE);
             printf("Read fds, handled\n");
           }
         }
@@ -379,6 +568,7 @@ static void* vLdbEventLoopBody(void* pv_arg_data)
       }
     }
   }
+  
 
   return NULL;
 }
@@ -405,7 +595,7 @@ uint8_t u8LrtInitLinuxDbusBluez(libruuvitag_context_type* px_full_ctx)
 {
   u8LdbInitLocalContext(px_full_ctx);
   u8LdbInitEventLoop(px_full_ctx);
-  u8LdbInitIpc(px_full_ctx);
+  u8LdbInitDbus(px_full_ctx);
   
   return LDB_SUCCESS;
 }
@@ -413,7 +603,7 @@ uint8_t u8LrtInitLinuxDbusBluez(libruuvitag_context_type* px_full_ctx)
 
 uint8_t u8LrtDeinitLinuxDbusBluez(libruuvitag_context_type* px_full_ctx)
 {
-  // Write to control, then join
+  // In deinit, we need to first break out of the event loop
   vLdbWriteControl(px_full_ctx, LDB_CONTROL_TERMINATE);
   pthread_join(px_full_ctx->x_ldb.x_evl_thread, NULL);
   
