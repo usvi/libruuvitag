@@ -16,6 +16,7 @@ typedef struct lrt_ldb_context_type lrt_ldb_context_type;
 typedef struct lrt_ldb_watch lrt_ldb_watch;
 typedef struct lrt_ldb_timeout lrt_ldb_timeout;
 
+
 struct lrt_ldb_watch
 {
   DBusWatchFlags e_watch_type;
@@ -37,12 +38,12 @@ struct lrt_ldb_timeout
 struct lrt_ldb_context_type
 {
   DBusConnection* px_dbus_conn;
-  uint8_t u8_running;
+  volatile uint32_t u32_inited_flags;
 
   int i_evl_control_write_fd;
   int i_evl_control_read_fd;
-  sem_t x_evl_sem;
   pthread_t x_evl_thread;
+  volatile uint8_t u8_evl_running;
 
   lrt_ldb_watch* px_event_watches;
   lrt_ldb_timeout* px_event_timeouts;
@@ -56,6 +57,7 @@ struct lrt_ldb_context_type
 // Normal defines
 #define LDB_TRUE           (1)
 #define LDB_FALSE          (0)
+#define LDB_UNKNOWN        (2)
 
 #define LDB_SUCCESS        (1)
 #define LDB_FAIL           (0)

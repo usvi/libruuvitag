@@ -11,6 +11,25 @@
 #define NUM_MS_IN_S   (1000)
 #define NUM_US_IN_MS  (1000)
 
+#define LDB_SIGNAL_DEF_INTERFACES_ADDED \
+  "type='signal',"\
+  "interface='org.freedesktop.DBus.ObjectManager',"\
+  "member='InterfacesAdded',"\
+  "path='/'"
+
+#define LDB_SIGNAL_DEF_INTERFACES_REMOVED \
+  "type='signal',"\
+  "interface='org.freedesktop.DBus.ObjectManager',"\
+  "member='InterfacesRemoved',"\
+  "path='/'"
+
+#define LDB_INITED_FLAGS_NONE                    (((uint32_t)0) << 0)
+#define LDB_INITED_FLAGS_CONN                    (((uint32_t)1) << 0)
+#define LDB_INITED_FLAGS_IFACES_ADDED            (((uint32_t)1) << 1)
+#define LDB_INITED_FLAGS_IFACES_REMOVED          (((uint32_t)1) << 2)
+#define LDB_INITED_FLAGS_WATCHES_ADDED           (((uint32_t)1) << 3)
+#define LDB_INITED_FLAGS_TIMEOUTS_ADDED          (((uint32_t)1) << 4)
+
 
 /*
 static DBusHandlerResult tInterfacesAltered(DBusConnection* px_dbus_conn,
@@ -330,97 +349,96 @@ static void vLdbToggleTimeout(DBusTimeout* px_dbus_timeout, void* pv_arg_data)
   return;
 }
 
+static void vLdbDeinitEventLoopWithDbus(libruuvitag_context_type* px_full_ctx)
+{
+
+}
 
 static uint8_t u8LdbInitDbus(libruuvitag_context_type* px_full_ctx)
 {
   DBusError x_error;
 
   dbus_error_init(&x_error);
+
+  // Making the connection
   px_full_ctx->x_ldb.px_dbus_conn = dbus_bus_get(DBUS_BUS_SYSTEM, &x_error);
 
   if (dbus_error_is_set(&x_error))
   {
-    printf("Bus failed\n");
     dbus_error_free(&x_error);
+    printf("Bus failed\n");
+    vLdbDeinitEventLoopWithDbus(px_full_ctx);
 
     return LDB_FAIL;
   }
+  px_full_ctx->x_ldb.u32_inited_flags |= LDB_INITED_FLAGS_CONN;
 
-  if (px_full_ctx->x_ldb.px_dbus_conn)
+  // Adding match for added interfaces
+  dbus_bus_add_match(px_full_ctx->x_ldb.px_dbus_conn,
+		     LDB_SIGNAL_DEF_INTERFACES_ADDED,
+		     &x_error);
+  // If we pass error, does not need flushing, sayeth the docs
+  if (dbus_error_is_set(&x_error))
   {
-    printf("Bus succeeded\n");
-    /*
+    dbus_error_free(&x_error);
+    printf("Adding InterfacesAdded match failed\n");
+    vLdbDeinitEventLoopWithDbus(px_full_ctx);
+
+    return LDB_FAIL;
+  }
+  px_full_ctx->x_ldb.u32_inited_flags |= LDB_INITED_FLAGS_IFACES_ADDED;
+
+  // Adding match for removed interfaces
+  dbus_bus_add_match(px_full_ctx->x_ldb.px_dbus_conn,
+		     LDB_SIGNAL_DEF_INTERFACES_REMOVED,
+		     &x_error);
+
+  if (dbus_error_is_set(&x_error))
+  {
+    dbus_error_free(&x_error);
+    printf("Adding InterfacesRemoved match failed\n");
+    vLdbDeinitEventLoopWithDbus(px_full_ctx);
+
+    return LDB_FAIL;
+  }
+  px_full_ctx->x_ldb.u32_inited_flags |= LDB_INITED_FLAGS_IFACES_REMOVED;
+
+  /*
     dbus_connection_add_filter(px_full_ctx->x_ldb.px_dbus_conn,
                                tInterfacesAltered, px_full_ctx, NULL);
-    */
-    printf("Adding signal matches\n");
-    dbus_bus_add_match(px_full_ctx->x_ldb.px_dbus_conn,
-                       "type='signal',"
-                       "interface='org.freedesktop.DBus.ObjectManager',"
-                       "member='InterfacesAdded',"
-                       "path='/'",
-                       &x_error);
-    dbus_connection_flush(px_full_ctx->x_ldb.px_dbus_conn);
-    printf("Flush succeeded\n");
+  */
 
-    if (dbus_error_is_set(&x_error))
-    {
-      printf("Setting match has errored\n");
-      dbus_error_free(&x_error);
-      dbus_error_init(&x_error);
-    }
-    dbus_bus_add_match(px_full_ctx->x_ldb.px_dbus_conn,
-                       "type='signal',"
-                       "interface='org.freedesktop.DBus.ObjectManager',"
-                       "member='InterfacesRemoved',"
-                       "path='/'",
-                       &x_error);
-    dbus_connection_flush(px_full_ctx->x_ldb.px_dbus_conn);
-    printf("Flush succeeded\n");
+  // Setting watches
+  if (dbus_connection_set_watch_functions(px_full_ctx->x_ldb.px_dbus_conn,
+					  tLdbAddWatch,
+					  vLdbRemoveWatch,
+					  vLdbToggleWatch,
+					  px_full_ctx,
+					  NULL) != TRUE)
+  {
+    printf("Set Watch failed\n");
+    vLdbDeinitEventLoopWithDbus(px_full_ctx);
 
-    if (dbus_error_is_set(&x_error))
-    {
-      printf("Setting match has errored\n");
-      dbus_error_free(&x_error);
-    }
+    return LDB_FAIL;
+  }
+  px_full_ctx->x_ldb.u32_inited_flags |= LDB_INITED_FLAGS_WATCHES_ADDED;
 
-
-
-    
-    if (dbus_connection_set_watch_functions(px_full_ctx->x_ldb.px_dbus_conn,
-                                            tLdbAddWatch,
-                                            vLdbRemoveWatch,
-                                            vLdbToggleWatch,
-                                            px_full_ctx,
-                                            NULL))
-    {
-      printf("Set watch succeeded\n");
-    }
-    else
-    {
-      printf("Set watch failed\n");
-    }
-    /*
-    if (dbus_connection_set_timeout_functions(px_full_ctx->x_ldb.px_dbus_conn,
+  // Setting timeouts
+  if (dbus_connection_set_timeout_functions(px_full_ctx->x_ldb.px_dbus_conn,
                                               tLdbAddTimeout,
                                               vLdbRemoveTimeout,
                                               vLdbToggleTimeout,
                                               px_full_ctx,
-                                              NULL))
-    {
-      printf("Set timeout succeeded\n");
-    }
-    else
-    {
-      printf("Set timeout failed\n");
-    }
-    //*/
-  }
-  else
+                                              NULL) != TRUE)
   {
+    printf("Set Watch failed\n");
+    vLdbDeinitEventLoopWithDbus(px_full_ctx);
+
     return LDB_FAIL;
-  }
-  
+  }    
+  px_full_ctx->x_ldb.u32_inited_flags |= LDB_INITED_FLAGS_TIMEOUTS_ADDED;
+
+  // All should be fine now
   return LDB_SUCCESS;
 }
 
@@ -504,8 +522,7 @@ static void* vLdbEventLoopBody(void* pv_arg_data)
   }
   px_full_ctx->x_ldb.i_evl_control_write_fd = ai_pipe_fds[1];
   px_full_ctx->x_ldb.i_evl_control_read_fd = ai_pipe_fds[0];
-    
-  sem_post(&(px_full_ctx->x_ldb.x_evl_sem));
+  u8LdbInitDbus(px_full_ctx);
   
   while (u8_evl_running == LDB_TRUE)
   {
@@ -593,29 +610,29 @@ static void* vLdbEventLoopBody(void* pv_arg_data)
   return NULL;
 }
 
-static uint8_t u8LdbInitEventLoop(libruuvitag_context_type* px_full_ctx)
+static uint8_t u8LdbInitEventLoopWithDbus(libruuvitag_context_type* px_full_ctx)
 {
   pthread_create(&(px_full_ctx->x_ldb.x_evl_thread), NULL, vLdbEventLoopBody, px_full_ctx);
-  sem_wait(&(px_full_ctx->x_ldb.x_evl_sem)); // Need to wait until thread up
 
   return LDB_SUCCESS;
 }
 
-static uint8_t u8LdbInitLocalContext(libruuvitag_context_type* px_full_ctx)
+static void vLdbInitLocalContext(libruuvitag_context_type* px_full_ctx)
 {
   px_full_ctx->x_ldb.i_evl_control_write_fd = -1;
   px_full_ctx->x_ldb.i_evl_control_read_fd = -1;
+  px_full_ctx->x_ldb.u8_evl_running = LDB_FALSE;
   px_full_ctx->x_ldb.px_event_watches = NULL;
-  sem_init(&(px_full_ctx->x_ldb.x_evl_sem), 0, 0);
-  
-  return LDB_SUCCESS;
+  px_full_ctx->x_ldb.px_event_timeouts = NULL;
+  px_full_ctx->x_ldb.u32_inited_flags = LDB_INITED_FLAGS_NONE;
+
+  // This will always succeed
 }
 
 uint8_t u8LrtInitLinuxDbusBluez(libruuvitag_context_type* px_full_ctx)
 {
-  u8LdbInitLocalContext(px_full_ctx);
-  u8LdbInitEventLoop(px_full_ctx);
-  u8LdbInitDbus(px_full_ctx);
+  vLdbInitLocalContext(px_full_ctx); 
+  u8LdbInitEventLoopWithDbus(px_full_ctx);
   
   return LDB_SUCCESS;
 }
@@ -624,8 +641,13 @@ uint8_t u8LrtInitLinuxDbusBluez(libruuvitag_context_type* px_full_ctx)
 uint8_t u8LrtDeinitLinuxDbusBluez(libruuvitag_context_type* px_full_ctx)
 {
   // In deinit, we need to first break out of the event loop
-  vLdbWriteControl(px_full_ctx, LDB_CONTROL_TERMINATE);
-  pthread_join(px_full_ctx->x_ldb.x_evl_thread, NULL);
+  if (px_full_ctx->x_ldb.u8_evl_running == LDB_TRUE)
+  {
+    vLdbWriteControl(px_full_ctx, LDB_CONTROL_TERMINATE);
+    // Event loop cleans up automatically after it terminates
+    pthread_join(px_full_ctx->x_ldb.x_evl_thread, NULL);
+  }
+  // Release non-dbus structures
   
   return LDB_SUCCESS;
 }
