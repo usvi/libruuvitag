@@ -132,11 +132,13 @@ static void vLdbRemoveWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
   {
     if (px_event_watch_iterator->px_dbus_watch == px_dbus_watch)
     {
+      printf("Match in native remove\n");
       // Found, just now need to remove it
       if (px_event_watch_last == NULL)
       {
         // We are removing head
-        px_full_ctx->x_ldb.px_event_watches->px_next_watch = px_event_watch_iterator->px_next_watch;
+	printf("Native remove head\n");
+        px_full_ctx->x_ldb.px_event_watches = px_event_watch_iterator->px_next_watch;
       }
       else
       {
@@ -284,7 +286,7 @@ static void vLdbRemoveTimeout(DBusTimeout* px_dbus_timeout, void* pv_arg_data)
       if (px_event_timeout_last == NULL)
       {
         // We are removing head
-        px_full_ctx->x_ldb.px_event_timeouts->px_next_timeout = px_event_timeout_iterator->px_next_timeout;
+        px_full_ctx->x_ldb.px_event_timeouts = px_event_timeout_iterator->px_next_timeout;
       }
       else
       {
@@ -356,7 +358,105 @@ static void vLdbToggleTimeout(DBusTimeout* px_dbus_timeout, void* pv_arg_data)
 
 static void vLdbDeinitEventLoopWithDbus(libruuvitag_context_type* px_full_ctx)
 {
+  lrt_ldb_timeout* px_event_timeout_iterator = NULL;
+  lrt_ldb_timeout* px_event_timeout_last = NULL;
+  lrt_ldb_watch* px_event_watch_iterator = NULL;
+  lrt_ldb_watch* px_event_watch_last = NULL;
+  
+  // Need to work backwards on the resources
 
+  // Coreloop
+  if (px_full_ctx->x_ldb.u32_inited_flags & LDB_INITED_FLAGS_CORELOOP_RUNNING)
+  {
+    printf("Deiniting coreloop\n");
+    // DOes nothing, but for sanity.
+    px_full_ctx->x_ldb.u32_inited_flags &= ~LDB_INITED_FLAGS_CORELOOP_RUNNING;
+  }
+
+  // Timeouts
+  if (px_full_ctx->x_ldb.u32_inited_flags & LDB_INITED_FLAGS_TIMEOUTS_ADDED)
+  {
+    printf("Deiniting timeouts\n");
+    dbus_connection_set_timeout_functions(px_full_ctx->x_ldb.px_dbus_conn,
+					  NULL, NULL, NULL, NULL, NULL);
+
+    px_event_timeout_iterator = px_full_ctx->x_ldb.px_event_timeouts;
+
+    // Release the linkedlist stuff
+    while (px_event_timeout_iterator != NULL)
+    {
+      px_event_timeout_last = px_event_timeout_iterator;
+      px_event_timeout_iterator = px_event_timeout_iterator->px_next_timeout;
+
+      free(px_event_timeout_last);
+    }
+    px_full_ctx->x_ldb.u32_inited_flags &= ~LDB_INITED_FLAGS_TIMEOUTS_ADDED;
+  }
+
+  // Watches
+  if (px_full_ctx->x_ldb.u32_inited_flags & LDB_INITED_FLAGS_WATCHES_ADDED)
+  {
+    printf("Deiniting watches\n");
+    dbus_connection_set_watch_functions(px_full_ctx->x_ldb.px_dbus_conn,
+					  NULL, NULL, NULL, NULL, NULL);
+
+    px_event_watch_iterator = px_full_ctx->x_ldb.px_event_watches;
+
+    // Release the linkedlist stuff
+    while (px_event_watch_iterator != NULL)
+    {
+      px_event_watch_last = px_event_watch_iterator;
+      px_event_watch_iterator = px_event_watch_iterator->px_next_watch;
+
+      printf("Dedicated free\n");
+      free(px_event_watch_last);
+    }
+    px_full_ctx->x_ldb.u32_inited_flags &= ~LDB_INITED_FLAGS_WATCHES_ADDED;
+  }
+
+  // Interfaces removed subscription
+  if (px_full_ctx->x_ldb.u32_inited_flags & LDB_INITED_FLAGS_IFACES_REMOVED)
+  {
+    printf("Deiniting interfaces removed\n");
+    dbus_bus_remove_match(px_full_ctx->x_ldb.px_dbus_conn,
+			  LDB_SIGNAL_DEF_INTERFACES_REMOVED,
+			  NULL);
+    // Needs flush because error is NULL
+    dbus_connection_flush(px_full_ctx->x_ldb.px_dbus_conn);
+    px_full_ctx->x_ldb.u32_inited_flags &= ~LDB_INITED_FLAGS_IFACES_REMOVED;
+  }
+  
+  // Interfaces added subscription
+  if (px_full_ctx->x_ldb.u32_inited_flags & LDB_INITED_FLAGS_IFACES_ADDED)
+  {
+    printf("Deiniting interfaces added\n");
+    dbus_bus_remove_match(px_full_ctx->x_ldb.px_dbus_conn,
+			  LDB_SIGNAL_DEF_INTERFACES_ADDED,
+			  NULL);
+    // Needs flush because error is NULL
+    dbus_connection_flush(px_full_ctx->x_ldb.px_dbus_conn);
+    px_full_ctx->x_ldb.u32_inited_flags &= ~LDB_INITED_FLAGS_IFACES_ADDED;
+  }
+
+  // Pending calls to be done later
+  
+  // The actual dbus connection
+  if (px_full_ctx->x_ldb.u32_inited_flags & LDB_INITED_FLAGS_CONN)
+  {
+    printf("Deiniting dbus connection\n");
+    dbus_connection_flush(px_full_ctx->x_ldb.px_dbus_conn);
+    dbus_connection_unref(px_full_ctx->x_ldb.px_dbus_conn);
+    px_full_ctx->x_ldb.u32_inited_flags &= ~LDB_INITED_FLAGS_CONN;
+  }
+
+  // Control pipe
+  if (px_full_ctx->x_ldb.u32_inited_flags & LDB_INITED_FLAGS_CTRL_PIPE)
+  {
+    printf("Deiniting control pipe fds\n");
+    close(px_full_ctx->x_ldb.i_evl_control_write_fd);
+    close(px_full_ctx->x_ldb.i_evl_control_read_fd);
+    px_full_ctx->x_ldb.u32_inited_flags &= ~LDB_INITED_FLAGS_CTRL_PIPE;
+  }
 }
 
 static uint8_t u8LdbInitDbus(libruuvitag_context_type* px_full_ctx)
@@ -626,7 +726,9 @@ static void* vLdbEventLoopBody(void* pv_arg_data)
       }
     }
   }
-  
+  // Out of event loop, most probably because we are deinitializing.
+  // Release resources.
+  vLdbDeinitEventLoopWithDbus(px_full_ctx);
 
   return NULL;
 }
