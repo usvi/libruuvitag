@@ -1,6 +1,9 @@
 #include "lrt_linux_dbus_bluez.h"
 
 #include <stdio.h>
+#include <inttypes.h>
+#include <semaphore.h>
+#include <pthread.h>
 #include <unistd.h>
 #include <stdlib.h>
 
@@ -24,11 +27,13 @@
   "path='/'"
 
 #define LDB_INITED_FLAGS_NONE                    (((uint32_t)0) << 0)
-#define LDB_INITED_FLAGS_CONN                    (((uint32_t)1) << 0)
-#define LDB_INITED_FLAGS_IFACES_ADDED            (((uint32_t)1) << 1)
-#define LDB_INITED_FLAGS_IFACES_REMOVED          (((uint32_t)1) << 2)
-#define LDB_INITED_FLAGS_WATCHES_ADDED           (((uint32_t)1) << 3)
-#define LDB_INITED_FLAGS_TIMEOUTS_ADDED          (((uint32_t)1) << 4)
+#define LDB_INITED_FLAGS_CTRL_PIPE               (((uint32_t)1) << 0)
+#define LDB_INITED_FLAGS_CONN                    (((uint32_t)1) << 1)
+#define LDB_INITED_FLAGS_IFACES_ADDED            (((uint32_t)1) << 2)
+#define LDB_INITED_FLAGS_IFACES_REMOVED          (((uint32_t)1) << 3)
+#define LDB_INITED_FLAGS_WATCHES_ADDED           (((uint32_t)1) << 4)
+#define LDB_INITED_FLAGS_TIMEOUTS_ADDED          (((uint32_t)1) << 5)
+#define LDB_INITED_FLAGS_CORELOOP_RUNNING        (((uint32_t)1) << 6)
 
 
 /*
@@ -518,11 +523,27 @@ static void* vLdbEventLoopBody(void* pv_arg_data)
 
   if (pipe(ai_pipe_fds) != 0)
   {
-    printf("Pipe failed\n");
+    printf("Control pipe creation failed\n");
+    vLdbDeinitEventLoopWithDbus(px_full_ctx);
+    sem_post(&(px_full_ctx->x_ldb.x_inited_sem));
+
+    return NULL;
   }
   px_full_ctx->x_ldb.i_evl_control_write_fd = ai_pipe_fds[1];
   px_full_ctx->x_ldb.i_evl_control_read_fd = ai_pipe_fds[0];
-  u8LdbInitDbus(px_full_ctx);
+  px_full_ctx->x_ldb.u32_inited_flags |= LDB_INITED_FLAGS_CTRL_PIPE;
+  
+  if (u8LdbInitDbus(px_full_ctx) != LDB_SUCCESS)
+  {
+    printf("Underlying dbus initialization has failed\n");
+    vLdbDeinitEventLoopWithDbus(px_full_ctx);
+    sem_post(&(px_full_ctx->x_ldb.x_inited_sem));
+
+    return NULL;
+  }
+  
+  px_full_ctx->x_ldb.u32_inited_flags |= LDB_INITED_FLAGS_CORELOOP_RUNNING;
+  sem_post(&(px_full_ctx->x_ldb.x_inited_sem));
   
   while (u8_evl_running == LDB_TRUE)
   {
@@ -610,29 +631,44 @@ static void* vLdbEventLoopBody(void* pv_arg_data)
   return NULL;
 }
 
-static uint8_t u8LdbInitEventLoopWithDbus(libruuvitag_context_type* px_full_ctx)
-{
-  pthread_create(&(px_full_ctx->x_ldb.x_evl_thread), NULL, vLdbEventLoopBody, px_full_ctx);
 
-  return LDB_SUCCESS;
-}
-
-static void vLdbInitLocalContext(libruuvitag_context_type* px_full_ctx)
+static uint8_t u8LdbInitLocalContext(libruuvitag_context_type* px_full_ctx)
 {
   px_full_ctx->x_ldb.i_evl_control_write_fd = -1;
   px_full_ctx->x_ldb.i_evl_control_read_fd = -1;
-  px_full_ctx->x_ldb.u8_evl_running = LDB_FALSE;
   px_full_ctx->x_ldb.px_event_watches = NULL;
   px_full_ctx->x_ldb.px_event_timeouts = NULL;
   px_full_ctx->x_ldb.u32_inited_flags = LDB_INITED_FLAGS_NONE;
 
-  // This will always succeed
+
+  if (sem_init(&(px_full_ctx->x_ldb.x_inited_sem), 0, 0) == -1)
+  {
+    return LDB_FAIL;
+  }
+
+  return LDB_SUCCESS;
 }
+
+static uint8_t u8LdbInitEventLoopWithDbus(libruuvitag_context_type* px_full_ctx)
+{
+  pthread_create(&(px_full_ctx->x_ldb.x_evl_thread), NULL, vLdbEventLoopBody, px_full_ctx);
+  // Need to wait here until semaphore to get the status, be it anything
+  sem_wait(&(px_full_ctx->x_ldb.x_inited_sem));
+  
+  return LDB_SUCCESS;
+}
+
 
 uint8_t u8LrtInitLinuxDbusBluez(libruuvitag_context_type* px_full_ctx)
 {
-  vLdbInitLocalContext(px_full_ctx); 
-  u8LdbInitEventLoopWithDbus(px_full_ctx);
+  if (u8LdbInitLocalContext(px_full_ctx) != LDB_SUCCESS)
+  {
+    return LDB_FAIL;
+  }
+  if (u8LdbInitEventLoopWithDbus(px_full_ctx) != LDB_SUCCESS)
+  {
+    return LDB_FAIL;
+  }
   
   return LDB_SUCCESS;
 }
@@ -641,7 +677,7 @@ uint8_t u8LrtInitLinuxDbusBluez(libruuvitag_context_type* px_full_ctx)
 uint8_t u8LrtDeinitLinuxDbusBluez(libruuvitag_context_type* px_full_ctx)
 {
   // In deinit, we need to first break out of the event loop
-  if (px_full_ctx->x_ldb.u8_evl_running == LDB_TRUE)
+  if (px_full_ctx->x_ldb.u32_inited_flags & LDB_INITED_FLAGS_CORELOOP_RUNNING)
   {
     vLdbWriteControl(px_full_ctx, LDB_CONTROL_TERMINATE);
     // Event loop cleans up automatically after it terminates

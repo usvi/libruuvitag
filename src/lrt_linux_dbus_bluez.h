@@ -6,6 +6,7 @@
 #include <inttypes.h>
 #include <semaphore.h>
 #include <pthread.h>
+
 #include <dbus/dbus.h>
 
 
@@ -39,11 +40,11 @@ struct lrt_ldb_context_type
 {
   DBusConnection* px_dbus_conn;
   volatile uint32_t u32_inited_flags;
+  sem_t x_inited_sem;
 
   int i_evl_control_write_fd;
   int i_evl_control_read_fd;
   pthread_t x_evl_thread;
-  volatile uint8_t u8_evl_running;
 
   lrt_ldb_watch* px_event_watches;
   lrt_ldb_timeout* px_event_timeouts;
