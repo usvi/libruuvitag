@@ -20,18 +20,15 @@ typedef struct lrt_ldb_timeout lrt_ldb_timeout;
 
 struct lrt_ldb_watch
 {
-  DBusWatchFlags e_watch_type;
-  dbus_bool_t t_enabled;
   int i_watch_fd;
-  DBusWatch* px_dbus_watch;
+  DBusWatch* px_dbus_read_watch;
+  DBusWatch* px_dbus_write_watch;
   lrt_ldb_watch* px_next_watch;
 };
 
 struct lrt_ldb_timeout
 {
-  dbus_bool_t t_enabled;
-  struct timeval x_interval;
-  struct timeval x_next_deadline;
+  int i_timeout_left;
   DBusTimeout* px_dbus_timeout;
   lrt_ldb_timeout* px_next_timeout;
 };
@@ -56,19 +53,11 @@ struct lrt_ldb_context_type
 
 
 // Normal defines
-#define LDB_TRUE           (1)
-#define LDB_FALSE          (0)
-#define LDB_UNKNOWN        (2)
 
 #define LDB_SUCCESS        (1)
 #define LDB_FAIL           (0)
 #define LDB_AGAIN          (2)
 
-
-#define LDB_CONTROL_ERROR             (0)
-#define LDB_CONTROL_TERMINATE         (1)
-#define LDB_CONTROL_DBUS_WATCHES      (2)
-#define LDB_CONTROL_DBUS_TIMEOUTS     (3)
 
 
 // Function prototypes
