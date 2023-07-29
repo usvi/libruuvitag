@@ -21,6 +21,7 @@ typedef struct lrt_ldb_timeout lrt_ldb_timeout;
 struct lrt_ldb_watch
 {
   int i_watch_fd;
+  uint32_t u32_epoll_event_flags;
   DBusWatch* px_dbus_read_watch;
   DBusWatch* px_dbus_write_watch;
   lrt_ldb_watch* px_next_watch;
@@ -41,6 +42,7 @@ struct lrt_ldb_context_type
 
   int i_evl_control_write_fd;
   int i_evl_control_read_fd;
+  int i_epoll_fd;
   pthread_t x_evl_thread;
 
   lrt_ldb_watch* px_event_watches;

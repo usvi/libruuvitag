@@ -19,21 +19,20 @@
 #define LDB_FALSE          (0)
 #define LDB_UNKNOWN        (2)
 
+#define LDB_SEM_INIT_FAILED                (-1)
 #define LDB_FD_INVALID                     (-1)
 #define LDB_TIMEOUT_INVALID                (-1)
+#define LDB_EPOLL_OP_INVALID               (-1)
+
+#define LDB_EPOLL_CREATE1_DEFAULTS         (0)
+#define LDB_EPOLL_EVENT_FLAGS_NONE         (0)
+#define LDB_EPOLL_MONITOR_NUM_EVENTS       (10)
 
 #define LDB_CONTROL_MAIN_OP_TERMINATE      (1)
 #define LDB_CONTROL_MAIN_OP_WATCH          (2)
 #define LDB_CONTROL_MAIN_OP_TIMEOUT        (3)
 
 #define LDB_CONTROL_NO_OP                  (0)
-
-#define LDB_CONTROL_ADD                    (1)
-#define LDB_CONTROL_DEL                    (2)
-
-#define LDB_CONTROL_READ                   (1)
-#define LDB_CONTROL_WRITE                  (2)
-  
 
 #define LDB_SIGNAL_DEF_INTERFACES_ADDED \
   "type='signal',"\
@@ -49,12 +48,14 @@
 
 #define LDB_INITED_FLAGS_NONE                    (((uint32_t)0) << 0)
 #define LDB_INITED_FLAGS_CTRL_PIPE               (((uint32_t)1) << 0)
-#define LDB_INITED_FLAGS_CONN                    (((uint32_t)1) << 1)
-#define LDB_INITED_FLAGS_IFACES_ADDED            (((uint32_t)1) << 2)
-#define LDB_INITED_FLAGS_IFACES_REMOVED          (((uint32_t)1) << 3)
-#define LDB_INITED_FLAGS_WATCHES_ADDED           (((uint32_t)1) << 4)
-#define LDB_INITED_FLAGS_TIMEOUTS_ADDED          (((uint32_t)1) << 5)
-#define LDB_INITED_FLAGS_CORELOOP_RUNNING        (((uint32_t)1) << 6)
+#define LDB_INITED_FLAGS_EPOLL_CREATED           (((uint32_t)1) << 1)
+#define LDB_INITED_FLAGS_EPOLL_CTRL_PIPE_ADDED   (((uint32_t)1) << 2)
+#define LDB_INITED_FLAGS_CONN                    (((uint32_t)1) << 3)
+#define LDB_INITED_FLAGS_IFACES_ADDED            (((uint32_t)1) << 4)
+#define LDB_INITED_FLAGS_IFACES_REMOVED          (((uint32_t)1) << 5)
+#define LDB_INITED_FLAGS_WATCHES_ADDED           (((uint32_t)1) << 6)
+#define LDB_INITED_FLAGS_TIMEOUTS_ADDED          (((uint32_t)1) << 7)
+#define LDB_INITED_FLAGS_CORELOOP_RUNNING        (((uint32_t)1) << 8)
 
 
 
@@ -74,44 +75,38 @@ static DBusHandlerResult tInterfacesAltered(DBusConnection* px_dbus_conn,
 
 static void vLdbWriteControl(libruuvitag_context_type* px_full_ctx,
 			     uint8_t u8_main_op,
-			     uint8_t u8_add_or_del,
-			     uint8_t u8_read_or_write,
+			     int i_epoll_op,
+                             uint32_t u32_epoll_event_flags,
 			     int i_file_descriptor)
 {
   write(px_full_ctx->x_ldb.i_evl_control_write_fd, &u8_main_op, sizeof(uint8_t));
 
-  if (u8_add_or_del != LDB_CONTROL_NO_OP)
+  if (i_epoll_op != LDB_EPOLL_OP_INVALID)
   {
-    write(px_full_ctx->x_ldb.i_evl_control_write_fd, &u8_add_or_del, sizeof(uint8_t));
-  }
-  if (u8_read_or_write != LDB_CONTROL_NO_OP)
-  {
-    write(px_full_ctx->x_ldb.i_evl_control_write_fd, &u8_read_or_write, sizeof(uint8_t));
-  }
-  if (i_file_descriptor != LDB_FD_INVALID)
-  {
+    write(px_full_ctx->x_ldb.i_evl_control_write_fd, &i_epoll_op, sizeof(int));
+    write(px_full_ctx->x_ldb.i_evl_control_write_fd, &u32_epoll_event_flags, sizeof(uint32_t));
     write(px_full_ctx->x_ldb.i_evl_control_write_fd, &i_file_descriptor, sizeof(int));
   }
 }
 
 
 static uint8_t u8LdbReadControl(libruuvitag_context_type* px_full_ctx,
-			     uint8_t* pu8_main_op,
-			     uint8_t* pu8_add_or_del,
-			     uint8_t* pu8_read_or_write,
-			     int* pi_file_descriptor)
+                                uint8_t* pu8_main_op,
+                                int* pi_epoll_op,
+                                uint32_t* pu32_epoll_event_flags,
+                                int* pi_file_descriptor)
 {
   if (pu8_main_op != NULL)
   {
     *pu8_main_op = LDB_CONTROL_NO_OP;
   }
-  if (pu8_add_or_del != NULL)
+  if (pi_epoll_op != NULL)
   {
-    *pu8_add_or_del = LDB_CONTROL_NO_OP;
+    *pi_epoll_op = LDB_EPOLL_OP_INVALID;
   }
-  if (pu8_read_or_write != NULL)
+  if (pu32_epoll_event_flags != NULL)
   {
-    *pu8_read_or_write = LDB_CONTROL_NO_OP;
+    *pu32_epoll_event_flags = LDB_EPOLL_EVENT_FLAGS_NONE;
   }
   if (pi_file_descriptor != NULL)
   {
@@ -127,23 +122,19 @@ static uint8_t u8LdbReadControl(libruuvitag_context_type* px_full_ctx,
     }
     else if ((*pu8_main_op) == LDB_CONTROL_MAIN_OP_WATCH)
     {
-      if ((sizeof(uint8_t) == read(px_full_ctx->x_ldb.i_evl_control_read_fd,
-				  pu8_add_or_del, sizeof(uint8_t))) &&
-	  (sizeof(uint8_t) == read(px_full_ctx->x_ldb.i_evl_control_read_fd,
-				   pu8_read_or_write, sizeof(uint8_t))) &&
-	  (sizeof(uint8_t) == read(px_full_ctx->x_ldb.i_evl_control_read_fd,
-				   pi_file_descriptor, sizeof(int))))
+      if ((sizeof(int) == read(px_full_ctx->x_ldb.i_evl_control_read_fd,
+                               pi_epoll_op, sizeof(int))) &&
+	  (sizeof(uint32_t) == read(px_full_ctx->x_ldb.i_evl_control_read_fd,
+                                    pu32_epoll_event_flags, sizeof(uint32_t))) &&
+	  (sizeof(int) == read(px_full_ctx->x_ldb.i_evl_control_read_fd,
+                               pi_file_descriptor, sizeof(int))))
       {
 	return LDB_SUCCESS;
       }
     }
     else if ((*pu8_main_op) == LDB_CONTROL_MAIN_OP_TIMEOUT)
     {
-      if (sizeof(uint8_t) == read(px_full_ctx->x_ldb.i_evl_control_read_fd,
-				  pu8_add_or_del, sizeof(uint8_t)))
-      {
-	return LDB_SUCCESS;
-      }
+      return LDB_SUCCESS;
     }
   }    
   
@@ -158,15 +149,16 @@ static dbus_bool_t tLdbAddWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
   lrt_ldb_watch* px_event_watch_last = NULL;
   lrt_ldb_watch* px_event_watch_new = NULL;
   void* pv_malloc_test = NULL;
+  int i_epoll_op = LDB_EPOLL_OP_INVALID;
   int i_search_fd = LDB_FD_INVALID;
 
-  px_full_ctx = (libruuvitag_context_type*)pv_arg_data;
-  
-  // Add all kinds of watches, also disabled. If DBus instructs us
-  // to add them disabled, there is a reason for it.
   printf("Watch add called\n");
 
+  // Add all kinds of watches, also disabled. If DBus instructs us
+  // to add them disabled, there is a reason for it.
+
   // Actually search for file descriptors because of epoll
+  px_full_ctx = (libruuvitag_context_type*)pv_arg_data;
   i_search_fd = dbus_watch_get_unix_fd(px_dbus_watch);
   px_event_watch_iterator = px_full_ctx->x_ldb.px_event_watches;
   
@@ -184,6 +176,7 @@ static dbus_bool_t tLdbAddWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
   if (px_event_watch_iterator == NULL)
   {
     printf("Allocating new watch container\n");
+    i_epoll_op = EPOLL_CTL_ADD;
     // Add new placeholder
     pv_malloc_test = malloc(sizeof(lrt_ldb_watch));
 
@@ -193,6 +186,7 @@ static dbus_bool_t tLdbAddWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
     }
     px_event_watch_new = (lrt_ldb_watch*)(pv_malloc_test);
     px_event_watch_new->i_watch_fd = dbus_watch_get_unix_fd(px_dbus_watch);
+    px_event_watch_new->u32_epoll_event_flags = LDB_EPOLL_EVENT_FLAGS_NONE;
     px_event_watch_new->px_dbus_read_watch = NULL;
     px_event_watch_new->px_dbus_write_watch = NULL;
     px_event_watch_new->px_next_watch = NULL;
@@ -210,39 +204,29 @@ static dbus_bool_t tLdbAddWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
     // Set iterator to same as the case where the placeholder is existing
     px_event_watch_iterator = px_event_watch_new;
   }
+  else
+  { 
+    i_epoll_op = EPOLL_CTL_MOD;
+  }
   if (dbus_watch_get_flags(px_dbus_watch) == DBUS_WATCH_READABLE)
   {
-    if (px_event_watch_iterator->px_dbus_read_watch == NULL)
-    {
-      px_event_watch_iterator->px_dbus_read_watch = px_dbus_watch;
-
-      if (dbus_watch_get_enabled(px_event_watch_iterator->px_dbus_read_watch) == TRUE)
-      {
-	vLdbWriteControl(px_full_ctx,
-                         LDB_CONTROL_MAIN_OP_WATCH,
-			 LDB_CONTROL_ADD,
-			 LDB_CONTROL_READ,
-			 px_event_watch_iterator->i_watch_fd);
-      }
-      return TRUE;
-    }
+    px_event_watch_iterator->px_dbus_read_watch = px_dbus_watch;
+    px_event_watch_iterator->u32_epoll_event_flags |= EPOLLIN;
   }
-  else if (dbus_watch_get_flags(px_dbus_watch) == DBUS_WATCH_WRITABLE)
+  else if (dbus_watch_get_flags(px_dbus_watch) == DBUS_WATCH_READABLE)
   {
-    if (px_event_watch_iterator->px_dbus_write_watch == NULL)
-    {
-      px_event_watch_iterator->px_dbus_write_watch = px_dbus_watch;
+    px_event_watch_iterator->px_dbus_write_watch = px_dbus_watch;
+    px_event_watch_iterator->u32_epoll_event_flags |= EPOLLOUT;
+  }
+  if (i_epoll_op != LDB_EPOLL_OP_INVALID)
+  {
+    vLdbWriteControl(px_full_ctx,
+                     LDB_CONTROL_MAIN_OP_WATCH,
+                     i_epoll_op,
+                     px_event_watch_iterator->u32_epoll_event_flags,
+                     px_event_watch_iterator->i_watch_fd);
 
-      if (dbus_watch_get_enabled(px_event_watch_iterator->px_dbus_write_watch) == TRUE)
-      {
-	vLdbWriteControl(px_full_ctx,
-                         LDB_CONTROL_MAIN_OP_WATCH,
-			 LDB_CONTROL_ADD,
-			 LDB_CONTROL_WRITE,
-			 px_event_watch_iterator->i_watch_fd);
-      }
-      return TRUE;
-    }
+    return TRUE;
   }
 
   // Something strange has happened, return false
@@ -255,14 +239,15 @@ static void vLdbRemoveWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
   libruuvitag_context_type* px_full_ctx = NULL;
   lrt_ldb_watch* px_event_watch_iterator = NULL;
   lrt_ldb_watch* px_event_watch_last = NULL;
+  // Need to keep op and flags as separate copy in
+  // case we are removing the entry
+  int i_epoll_op = LDB_EPOLL_OP_INVALID;
+  uint32_t u32_epoll_event_flags = LDB_EPOLL_EVENT_FLAGS_NONE;
   int i_search_fd = LDB_FD_INVALID;
-  uint8_t u8_removed_type = LDB_CONTROL_NO_OP;
-  
-  px_full_ctx = (libruuvitag_context_type*)pv_arg_data;
 
   printf("Watch remove called\n");
-  
-  // Also here search for file descriptors because of epoll
+
+  px_full_ctx = (libruuvitag_context_type*)pv_arg_data;
   i_search_fd = dbus_watch_get_unix_fd(px_dbus_watch);
   px_event_watch_iterator = px_full_ctx->x_ldb.px_event_watches;
   
@@ -275,12 +260,16 @@ static void vLdbRemoveWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
       if (px_event_watch_iterator->px_dbus_read_watch == px_dbus_watch)
       {
 	px_event_watch_iterator->px_dbus_read_watch = NULL;
-	u8_removed_type = LDB_CONTROL_READ;
+	i_epoll_op = EPOLL_CTL_MOD; // Override later if removing the container
+        px_event_watch_iterator->u32_epoll_event_flags &= ~EPOLLIN;        
+        u32_epoll_event_flags = px_event_watch_iterator->u32_epoll_event_flags;
       }
       else if (px_event_watch_iterator->px_dbus_write_watch == px_dbus_watch)
       {
 	px_event_watch_iterator->px_dbus_write_watch = NULL;
-	u8_removed_type = LDB_CONTROL_WRITE;
+	i_epoll_op = EPOLL_CTL_MOD; // Override later if removing the container
+        px_event_watch_iterator->u32_epoll_event_flags &= ~EPOLLOUT;
+        u32_epoll_event_flags = px_event_watch_iterator->u32_epoll_event_flags;
       }
       // Remove completely if both are null now
       if ((px_event_watch_iterator->px_dbus_read_watch == NULL) &&
@@ -288,6 +277,7 @@ static void vLdbRemoveWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
       {
 	// Final event removed, removing container
 	printf("Removing watch container");
+	i_epoll_op = EPOLL_CTL_DEL; // Overridden
 
 	if (px_event_watch_last == NULL)
 	{
@@ -302,26 +292,18 @@ static void vLdbRemoveWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
 	// Actual free
 	free(px_event_watch_iterator);
       }
-	  
-      // Now that possible container remove is done, check from flags which one was it
-      if (u8_removed_type == LDB_CONTROL_READ)
+      
+      // Parameters have been recorded to flags, if valid
+      if (i_epoll_op != LDB_EPOLL_OP_INVALID)
       {
-	vLdbWriteControl(px_full_ctx,
+        vLdbWriteControl(px_full_ctx,
                          LDB_CONTROL_MAIN_OP_WATCH,
-			 LDB_CONTROL_DEL,
-			 LDB_CONTROL_READ,
-			 px_event_watch_iterator->i_watch_fd);
-      }
-      else if (u8_removed_type == LDB_CONTROL_WRITE)
-      {
-	vLdbWriteControl(px_full_ctx,
-                         LDB_CONTROL_MAIN_OP_WATCH,
-			 LDB_CONTROL_DEL,
-			 LDB_CONTROL_WRITE,
-			 px_event_watch_iterator->i_watch_fd);
-      }
+                         i_epoll_op,
+                         u32_epoll_event_flags,
+			 i_search_fd);
 
-      return;
+        return;
+      }
     }
     // Still here, so not found
     px_event_watch_last = px_event_watch_iterator;
@@ -348,57 +330,35 @@ static void vLdbToggleWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
   {
     if (px_event_watch_iterator->i_watch_fd == i_search_fd)
     {
-      // Found file descriptor. But which one is it? Read or write?
       if (dbus_watch_get_flags(px_dbus_watch) == DBUS_WATCH_READABLE)
       {
-        if ((dbus_watch_get_enabled(px_dbus_watch) == TRUE) &&
-            (dbus_watch_get_enabled(px_event_watch_iterator->px_dbus_read_watch) == FALSE))
+        if (dbus_watch_get_enabled(px_dbus_watch))
         {
-          vLdbWriteControl(px_full_ctx,
-                           LDB_CONTROL_MAIN_OP_WATCH,
-                           LDB_CONTROL_ADD,
-                           LDB_CONTROL_READ,
-                           px_event_watch_iterator->i_watch_fd);
-
-          return;
+          px_event_watch_iterator->u32_epoll_event_flags |= EPOLLIN;
         }
-        else if ((dbus_watch_get_enabled(px_dbus_watch) == FALSE) &&
-                 (dbus_watch_get_enabled(px_event_watch_iterator->px_dbus_read_watch) == TRUE))
+        else
         {
-          vLdbWriteControl(px_full_ctx,
-                           LDB_CONTROL_MAIN_OP_WATCH,
-                           LDB_CONTROL_DEL,
-                           LDB_CONTROL_READ,
-                           px_event_watch_iterator->i_watch_fd);
-
-          return;
+          px_event_watch_iterator->u32_epoll_event_flags &= ~EPOLLIN;
         }
       }
-      else if(dbus_watch_get_flags(px_dbus_watch) == DBUS_WATCH_WRITABLE)
+      else if (dbus_watch_get_flags(px_dbus_watch) == DBUS_WATCH_WRITABLE)
       {
-        if ((dbus_watch_get_enabled(px_dbus_watch) == TRUE) &&
-            (dbus_watch_get_enabled(px_event_watch_iterator->px_dbus_write_watch) == FALSE))
+        if (dbus_watch_get_enabled(px_dbus_watch))
         {
-          vLdbWriteControl(px_full_ctx,
-                           LDB_CONTROL_MAIN_OP_WATCH,
-                           LDB_CONTROL_ADD,
-                           LDB_CONTROL_WRITE,
-                           px_event_watch_iterator->i_watch_fd);
-
-          return;
+          px_event_watch_iterator->u32_epoll_event_flags |= EPOLLOUT;
         }
-        else if ((dbus_watch_get_enabled(px_dbus_watch) == FALSE) &&
-                 (dbus_watch_get_enabled(px_event_watch_iterator->px_dbus_write_watch) == TRUE))
+        else
         {
-          vLdbWriteControl(px_full_ctx,
-                           LDB_CONTROL_MAIN_OP_WATCH,
-                           LDB_CONTROL_DEL,
-                           LDB_CONTROL_WRITE,
-                           px_event_watch_iterator->i_watch_fd);
-
-          return;
+          px_event_watch_iterator->u32_epoll_event_flags &= ~EPOLLOUT;
         }
       }
+      vLdbWriteControl(px_full_ctx,
+                       LDB_CONTROL_MAIN_OP_WATCH,
+                       EPOLL_CTL_MOD,
+                       px_event_watch_iterator->u32_epoll_event_flags,
+                       px_event_watch_iterator->i_watch_fd);
+      
+      return;
     }
     // Still here, so not found
     px_event_watch_iterator = px_event_watch_iterator->px_next_watch;
@@ -473,9 +433,9 @@ static dbus_bool_t tLdbAddTimeout(DBusTimeout* px_dbus_timeout, void* pv_arg_dat
   }
   vLdbWriteControl(px_full_ctx,
                    LDB_CONTROL_MAIN_OP_TIMEOUT,
-                   LDB_CONTROL_NO_OP,
-                   LDB_CONTROL_NO_OP,
-                   LDB_CONTROL_NO_OP);
+                   LDB_EPOLL_OP_INVALID,
+                   LDB_EPOLL_EVENT_FLAGS_NONE,
+                   LDB_FD_INVALID);
 
   return TRUE;
 }
@@ -511,9 +471,9 @@ static void vLdbRemoveTimeout(DBusTimeout* px_dbus_timeout, void* pv_arg_data)
       free(px_event_timeout_iterator);
       vLdbWriteControl(px_full_ctx,
                        LDB_CONTROL_MAIN_OP_TIMEOUT,
-                       LDB_CONTROL_NO_OP,
-                       LDB_CONTROL_NO_OP,
-                       LDB_CONTROL_NO_OP);
+                       LDB_EPOLL_OP_INVALID,
+                       LDB_EPOLL_EVENT_FLAGS_NONE,
+                       LDB_FD_INVALID);
       
       return;
     }
@@ -548,9 +508,9 @@ static void vLdbToggleTimeout(DBusTimeout* px_dbus_timeout, void* pv_arg_data)
           dbus_timeout_get_interval(px_event_timeout_iterator->px_dbus_timeout);
         vLdbWriteControl(px_full_ctx,
                          LDB_CONTROL_MAIN_OP_TIMEOUT,
-                         LDB_CONTROL_NO_OP,
-                         LDB_CONTROL_NO_OP,
-                         LDB_CONTROL_NO_OP);
+                         LDB_EPOLL_OP_INVALID,
+                         LDB_EPOLL_EVENT_FLAGS_NONE,
+                         LDB_FD_INVALID);
       }
       else if ((dbus_timeout_get_enabled(px_dbus_timeout) == FALSE) &&
           (dbus_timeout_get_enabled(px_event_timeout_iterator->px_dbus_timeout) == TRUE))
@@ -558,9 +518,9 @@ static void vLdbToggleTimeout(DBusTimeout* px_dbus_timeout, void* pv_arg_data)
         px_event_timeout_iterator->i_timeout_left = LDB_TIMEOUT_INVALID;
         vLdbWriteControl(px_full_ctx,
                          LDB_CONTROL_MAIN_OP_TIMEOUT,
-                         LDB_CONTROL_NO_OP,
-                         LDB_CONTROL_NO_OP,
-                         LDB_CONTROL_NO_OP);
+                         LDB_EPOLL_OP_INVALID,
+                         LDB_EPOLL_EVENT_FLAGS_NONE,
+                         LDB_FD_INVALID);
       }
       // As this was the timeout, return regardless of if we changed anything
       return;
@@ -579,6 +539,7 @@ static void vLdbDeinitEventLoopWithDbus(libruuvitag_context_type* px_full_ctx)
   lrt_ldb_timeout* px_event_timeout_last = NULL;
   lrt_ldb_watch* px_event_watch_iterator = NULL;
   lrt_ldb_watch* px_event_watch_last = NULL;
+  struct epoll_event x_epoll_temp_event;
   
   // Need to work backwards on the resources
 
@@ -656,6 +617,7 @@ static void vLdbDeinitEventLoopWithDbus(libruuvitag_context_type* px_full_ctx)
   }
 
   // Pending calls to be done later
+
   
   // The actual dbus connection
   if (px_full_ctx->x_ldb.u32_inited_flags & LDB_INITED_FLAGS_CONN)
@@ -666,6 +628,25 @@ static void vLdbDeinitEventLoopWithDbus(libruuvitag_context_type* px_full_ctx)
     px_full_ctx->x_ldb.u32_inited_flags &= ~LDB_INITED_FLAGS_CONN;
   }
 
+  // Remove control pipe from epoll
+  if (px_full_ctx->x_ldb.u32_inited_flags & LDB_INITED_FLAGS_EPOLL_CTRL_PIPE_ADDED)
+  {
+    printf("Removing control pipe from epoll\n");
+    x_epoll_temp_event.events = 0;
+    x_epoll_temp_event.data.fd = px_full_ctx->x_ldb.i_evl_control_read_fd;
+    epoll_ctl(px_full_ctx->x_ldb.i_epoll_fd, EPOLL_CTL_DEL,
+              x_epoll_temp_event.data.fd, &x_epoll_temp_event);
+    px_full_ctx->x_ldb.u32_inited_flags &= ~LDB_INITED_FLAGS_EPOLL_CTRL_PIPE_ADDED;
+  }
+
+  // Remove the epoll structure itself
+  if (px_full_ctx->x_ldb.u32_inited_flags & LDB_INITED_FLAGS_EPOLL_CREATED)
+  {
+    printf("Removing epoll structure\n");
+    close(px_full_ctx->x_ldb.i_epoll_fd);
+    px_full_ctx->x_ldb.u32_inited_flags &= ~LDB_INITED_FLAGS_EPOLL_CREATED;
+  }
+  
   // Control pipe
   if (px_full_ctx->x_ldb.u32_inited_flags & LDB_INITED_FLAGS_CTRL_PIPE)
   {
@@ -775,14 +756,17 @@ static void* vLdbEventLoopBody(void* pv_arg_data)
   // Strange that wpa_supplicant uses them. I am probably reading wrong.
   uint8_t u8_evl_running = LDB_TRUE;
 
-  uint8_t u8_control_main_op = LDB_CONTROL_NO_OP;
-  uint8_t u8_control_add_or_del = LDB_CONTROL_NO_OP;
-  uint8_t u8_control_read_or_write = LDB_CONTROL_NO_OP;
-  int i_control_passed_fd = LDB_FD_INVALID;
+  struct epoll_event x_epoll_temp_event;
+  struct epoll_event ax_epoll_monitor_events[LDB_EPOLL_MONITOR_NUM_EVENTS];
+  int i_epoll_fds_ready = 0;
+  int i_epoll_iterator = 0;
   int i_next_timeout = LDB_TIMEOUT_INVALID;
-     
 
-
+  uint8_t u8_main_op = LDB_CONTROL_NO_OP;
+  int i_epoll_op = LDB_EPOLL_OP_INVALID;
+  uint32_t u32_epoll_event_flags = LDB_EPOLL_EVENT_FLAGS_NONE;
+  int i_control_passed_fd = LDB_FD_INVALID;
+  
   px_full_ctx = (libruuvitag_context_type*)pv_arg_data;
 
   if (pipe(ai_pipe_fds) != 0)
@@ -796,7 +780,36 @@ static void* vLdbEventLoopBody(void* pv_arg_data)
   px_full_ctx->x_ldb.i_evl_control_write_fd = ai_pipe_fds[1];
   px_full_ctx->x_ldb.i_evl_control_read_fd = ai_pipe_fds[0];
   px_full_ctx->x_ldb.u32_inited_flags |= LDB_INITED_FLAGS_CTRL_PIPE;
+
+  // Try to create and set the epoll stuff
+  px_full_ctx->x_ldb.i_epoll_fd = epoll_create1(LDB_EPOLL_CREATE1_DEFAULTS);
+
+  if (px_full_ctx->x_ldb.i_epoll_fd == LDB_FD_INVALID)
+  {
+    printf("Unable to create epoll fd\n");
+    vLdbDeinitEventLoopWithDbus(px_full_ctx);
+    sem_post(&(px_full_ctx->x_ldb.x_inited_sem));
+
+    return NULL;
+  }
+  px_full_ctx->x_ldb.u32_inited_flags |= LDB_INITED_FLAGS_EPOLL_CREATED;
   
+  // Add the control pipe to epoll interest list. Rest is added inside the loop.
+  x_epoll_temp_event.events = EPOLLIN;
+  x_epoll_temp_event.data.fd = px_full_ctx->x_ldb.i_evl_control_read_fd;
+
+  if (epoll_ctl(px_full_ctx->x_ldb.i_epoll_fd, EPOLL_CTL_ADD,
+                x_epoll_temp_event.data.fd, &x_epoll_temp_event) == LDB_EPOLL_OP_INVALID)
+  {
+    printf("Unable to add control fd to epoll\n");
+    vLdbDeinitEventLoopWithDbus(px_full_ctx);
+    sem_post(&(px_full_ctx->x_ldb.x_inited_sem));
+
+    return NULL;
+  }
+  px_full_ctx->x_ldb.u32_inited_flags |= LDB_INITED_FLAGS_EPOLL_CTRL_PIPE_ADDED;
+  
+  // Setting up the actual dbus
   if (u8LdbInitDbus(px_full_ctx) != LDB_SUCCESS)
   {
     printf("Underlying dbus initialization has failed\n");
@@ -805,14 +818,38 @@ static void* vLdbEventLoopBody(void* pv_arg_data)
 
     return NULL;
   }
-  
-  
   px_full_ctx->x_ldb.u32_inited_flags |= LDB_INITED_FLAGS_CORELOOP_RUNNING;
+
+  // Finally we can release caller
   sem_post(&(px_full_ctx->x_ldb.x_inited_sem));
   
   while (u8_evl_running == LDB_TRUE)
   {
     sleep(1);
+    i_epoll_fds_ready = epoll_wait(px_full_ctx->x_ldb.i_epoll_fd, ax_epoll_monitor_events,
+                                   LDB_EPOLL_MONITOR_NUM_EVENTS, i_next_timeout);
+    printf("Epoll got %d fds\n", i_epoll_fds_ready);
+
+    for (i_epoll_iterator = 0; i_epoll_iterator < i_epoll_fds_ready; i_epoll_iterator++)
+    {
+      printf(" %d\n", ax_epoll_monitor_events[i_epoll_iterator].data.fd);
+
+      if (ax_epoll_monitor_events[i_epoll_iterator].data.fd ==
+          px_full_ctx->x_ldb.i_evl_control_read_fd)
+      {
+        if (u8LdbReadControl(px_full_ctx, &u8_main_op, &i_epoll_op,
+                             &u32_epoll_event_flags, &i_control_passed_fd) == LDB_SUCCESS)
+        {
+          if (u8_main_op == LDB_CONTROL_MAIN_OP_TERMINATE)
+          {
+            printf("Terminating as requested\n");
+            u8_evl_running = LDB_FALSE;
+            
+            break;
+          }
+        }
+      }
+    }
   }
   // Out of event loop, most probably because we are deinitializing.
   // Release resources.
@@ -826,12 +863,13 @@ static uint8_t u8LdbInitLocalContext(libruuvitag_context_type* px_full_ctx)
 {
   px_full_ctx->x_ldb.i_evl_control_write_fd = LDB_FD_INVALID;
   px_full_ctx->x_ldb.i_evl_control_read_fd = LDB_FD_INVALID;
+  px_full_ctx->x_ldb.i_epoll_fd = LDB_FD_INVALID;
   px_full_ctx->x_ldb.px_event_watches = NULL;
   px_full_ctx->x_ldb.px_event_timeouts = NULL;
   px_full_ctx->x_ldb.u32_inited_flags = LDB_INITED_FLAGS_NONE;
 
 
-  if (sem_init(&(px_full_ctx->x_ldb.x_inited_sem), 0, 0) == -1)
+  if (sem_init(&(px_full_ctx->x_ldb.x_inited_sem), 0, 0) == LDB_SEM_INIT_FAILED)
   {
     return LDB_FAIL;
   }
@@ -871,14 +909,14 @@ uint8_t u8LrtDeinitLinuxDbusBluez(libruuvitag_context_type* px_full_ctx)
   {
     vLdbWriteControl(px_full_ctx,
                      LDB_CONTROL_MAIN_OP_TERMINATE,
-                     LDB_CONTROL_NO_OP,
-                     LDB_CONTROL_NO_OP,
-                     LDB_CONTROL_NO_OP);
+                     LDB_EPOLL_OP_INVALID,
+                     LDB_EPOLL_EVENT_FLAGS_NONE,
+                     LDB_FD_INVALID);
 
     // Event loop cleans up automatically after it terminates
     pthread_join(px_full_ctx->x_ldb.x_evl_thread, NULL);
   }
-  // Release non-dbus structures
+  printf("Returning success\n");
   
   return LDB_SUCCESS;
 }
