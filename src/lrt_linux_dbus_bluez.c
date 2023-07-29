@@ -746,26 +746,55 @@ static uint8_t u8LdbInitDbus(libruuvitag_context_type* px_full_ctx)
 }
 
 
+static uint8_t u8EpollWaitAndDispatch(libruuvitag_context_type* px_full_ctx)
+{
+  static struct epoll_event ax_epoll_monitor_events[LDB_EPOLL_MONITOR_NUM_EVENTS];
+  int i_epoll_fds_ready = 0;
+  int i_next_timeout = LDB_TIMEOUT_INVALID;
+  int i_epoll_iterator = 0;
+  
+  uint8_t u8_main_op = LDB_CONTROL_NO_OP;
+  int i_epoll_op = LDB_EPOLL_OP_INVALID;
+  uint32_t u32_epoll_event_flags = LDB_EPOLL_EVENT_FLAGS_NONE;
+  int i_control_passed_fd = LDB_FD_INVALID;
+  
+  i_epoll_fds_ready = epoll_wait(px_full_ctx->x_ldb.i_epoll_fd, ax_epoll_monitor_events,
+                                 LDB_EPOLL_MONITOR_NUM_EVENTS, i_next_timeout);
+  printf("Epoll got %d fds\n", i_epoll_fds_ready);
+
+  for (i_epoll_iterator = 0; i_epoll_iterator < i_epoll_fds_ready; i_epoll_iterator++)
+  {
+    printf(" %d\n", ax_epoll_monitor_events[i_epoll_iterator].data.fd);
+
+    if (ax_epoll_monitor_events[i_epoll_iterator].data.fd ==
+        px_full_ctx->x_ldb.i_evl_control_read_fd)
+    {
+      if (u8LdbReadControl(px_full_ctx, &u8_main_op, &i_epoll_op,
+                           &u32_epoll_event_flags, &i_control_passed_fd) == LDB_SUCCESS)
+      {
+        if (u8_main_op == LDB_CONTROL_MAIN_OP_TERMINATE)
+        {
+          printf("Terminating as requested\n");
+
+          return LDB_FALSE;
+        }
+      }
+    }
+  }
+  return LDB_TRUE;
+}
+
 
 static void* vLdbEventLoopBody(void* pv_arg_data)
 {
   libruuvitag_context_type* px_full_ctx = NULL;
-  lrt_ldb_watch* px_event_watch_iterator = NULL;
   int ai_pipe_fds[2];
   // If I read docs correctly, exception fds are not needed.
   // Strange that wpa_supplicant uses them. I am probably reading wrong.
   uint8_t u8_evl_running = LDB_TRUE;
 
   struct epoll_event x_epoll_temp_event;
-  struct epoll_event ax_epoll_monitor_events[LDB_EPOLL_MONITOR_NUM_EVENTS];
-  int i_epoll_fds_ready = 0;
-  int i_epoll_iterator = 0;
-  int i_next_timeout = LDB_TIMEOUT_INVALID;
 
-  uint8_t u8_main_op = LDB_CONTROL_NO_OP;
-  int i_epoll_op = LDB_EPOLL_OP_INVALID;
-  uint32_t u32_epoll_event_flags = LDB_EPOLL_EVENT_FLAGS_NONE;
-  int i_control_passed_fd = LDB_FD_INVALID;
   
   px_full_ctx = (libruuvitag_context_type*)pv_arg_data;
 
@@ -825,30 +854,11 @@ static void* vLdbEventLoopBody(void* pv_arg_data)
   
   while (u8_evl_running == LDB_TRUE)
   {
-    sleep(1);
-    i_epoll_fds_ready = epoll_wait(px_full_ctx->x_ldb.i_epoll_fd, ax_epoll_monitor_events,
-                                   LDB_EPOLL_MONITOR_NUM_EVENTS, i_next_timeout);
-    printf("Epoll got %d fds\n", i_epoll_fds_ready);
+    sleep(1); // just in case for now
 
-    for (i_epoll_iterator = 0; i_epoll_iterator < i_epoll_fds_ready; i_epoll_iterator++)
+    if (u8EpollWaitAndDispatch(px_full_ctx) == LDB_FAIL)
     {
-      printf(" %d\n", ax_epoll_monitor_events[i_epoll_iterator].data.fd);
-
-      if (ax_epoll_monitor_events[i_epoll_iterator].data.fd ==
-          px_full_ctx->x_ldb.i_evl_control_read_fd)
-      {
-        if (u8LdbReadControl(px_full_ctx, &u8_main_op, &i_epoll_op,
-                             &u32_epoll_event_flags, &i_control_passed_fd) == LDB_SUCCESS)
-        {
-          if (u8_main_op == LDB_CONTROL_MAIN_OP_TERMINATE)
-          {
-            printf("Terminating as requested\n");
-            u8_evl_running = LDB_FALSE;
-            
-            break;
-          }
-        }
-      }
+      u8_evl_running = LDB_FALSE;
     }
   }
   // Out of event loop, most probably because we are deinitializing.
