@@ -29,6 +29,7 @@ struct lrt_ldb_watch
 
 struct lrt_ldb_timeout
 {
+  uint8_t u8_enabled;
   int i_timeout_left;
   DBusTimeout* px_dbus_timeout;
   lrt_ldb_timeout* px_next_timeout;
