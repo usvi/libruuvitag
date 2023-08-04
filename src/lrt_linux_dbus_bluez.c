@@ -138,10 +138,10 @@ static uint8_t u8LdbReadControl(libruuvitag_context_type* px_full_ctx,
 }
 
 
-static int iCompareNodeAndDbusWatchFds(void* v_node_watch_data, void* v_dbus_watch_data)
+static int iCompareNodeAndDbusWatchFds(lrt_llist_node* px_list_node, void* pv_dbus_watch_data)
 {
-  if (((lrt_ldb_node_watch*)v_node_watch_data)->i_watch_fd ==
-      dbus_watch_get_unix_fd((DBusWatch*)v_dbus_watch_data))
+  if (((lrt_ldb_node_watch*)px_list_node)->i_watch_fd ==
+      dbus_watch_get_unix_fd((DBusWatch*)pv_dbus_watch_data))
   {
     return 0;
   }
@@ -340,10 +340,10 @@ static void vLdbToggleWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
 }
 
 
-static int iCompareNodeAndDbusTimeout(void* v_node_timeout_data, void* v_dbus_timeout_data)
+static int iCompareNodeAndDbusTimeout(lrt_llist_node* px_list_node, void* pv_dbus_timeout_data)
 {
-  if (((DBusWatch*)(((lrt_ldb_node_timeout*)v_node_timeout_data)->px_dbus_timeout)) ==
-      ((DBusWatch*)v_dbus_timeout_data))
+  if (((DBusWatch*)(((lrt_ldb_node_timeout*)px_list_node)->px_dbus_timeout)) ==
+      ((DBusWatch*)pv_dbus_timeout_data))
   {
     return 0;
   }
@@ -662,12 +662,32 @@ static uint8_t u8LdbInitDbus(libruuvitag_context_type* px_full_ctx)
 }
 
 
-
-static uint8_t u8DispatchWatchActivity(struct epoll_event* px_epoll_event)
+static int iDispatchDbusWatchFromEpollEvent(lrt_llist_node* px_list_node, void* pv_epoll_event_data)
 {
+  lrt_ldb_node_watch* px_node_watch = NULL;
+  struct epoll_event* px_epoll_event = NULL;
 
+  px_node_watch = (lrt_ldb_node_watch*)px_list_node;
+  px_epoll_event = (struct epoll_event*)pv_epoll_event_data;
+
+  if (px_node_watch->i_watch_fd == px_epoll_event->data.fd)
+  {
+    if ((px_epoll_event->events & EPOLLIN) & (px_node_watch->u32_epoll_event_flags))
+    {
+      printf("Dbus-distpatching read\n");
+      dbus_watch_handle(px_node_watch->px_dbus_read_watch, DBUS_WATCH_READABLE);
+    }
+    if ((px_epoll_event->events & EPOLLOUT) & (px_node_watch->u32_epoll_event_flags))
+    {
+      printf("Dbus-distpatching write\n");
+      dbus_watch_handle(px_node_watch->px_dbus_write_watch, DBUS_WATCH_WRITABLE);
+    }
+  }
+  
   return LDB_SUCCESS;
 }
+
+
 
 
 
@@ -726,10 +746,9 @@ static uint8_t u8EpollWaitAndDispatch(libruuvitag_context_type* px_full_ctx)
     }
     else
     {
-      if (u8DispatchWatchActivity(&(ax_epoll_monitor_events[i_epoll_iterator])) != LDB_SUCCESS)
-      {
-        return LDB_FAIL;
-      }
+      vLrtLlistApplyFunc(px_full_ctx->x_ldb.px_llist_watches,
+                         iDispatchDbusWatchFromEpollEvent,
+                         &(ax_epoll_monitor_events[i_epoll_iterator]));
     }
   }
   return LDB_SUCCESS;
