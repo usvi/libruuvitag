@@ -6,14 +6,22 @@
 #include <stdlib.h>
 
 
-lrt_llist_head xLrtLlistNew(void)
+lrt_llist_head* pxLrtLlistNew(void)
 {
-  lrt_llist_head x_new_list;
+  void* pv_malloc_test = NULL;
+  lrt_llist_head* px_new_list = NULL;
 
-  x_new_list.px_first_node = NULL;
-  x_new_list.px_last_node = NULL;
+  pv_malloc_test = malloc(sizeof(lrt_llist_head));
 
-  return x_new_list;
+  if (pv_malloc_test == NULL)
+  {
+    return NULL;
+  }
+  px_new_list = (lrt_llist_head*)pv_malloc_test;
+  px_new_list->px_first_node = NULL;
+  px_new_list->px_last_node = NULL;
+
+  return px_new_list;
 }
 
 
@@ -118,8 +126,8 @@ void vLrtLlistAddNode(lrt_llist_head* px_list,
 }
 
 
-void vLrtLlistRemNode(lrt_llist_head* px_list,
-                      void* v_node_data)
+void vLrtLlistFreeNode(lrt_llist_head* px_list,
+                       void* v_node_data)
 {
   lrt_llist_node* px_del_node = NULL;
 
@@ -141,6 +149,7 @@ void vLrtLlistRemNode(lrt_llist_head* px_list,
   {
     px_list->px_last_node = px_del_node->px_prev_node;
   }
+  free(px_del_node);
 }
 
 
@@ -157,4 +166,5 @@ void vLrtLlistFreeAll(lrt_llist_head* px_list)
     px_node_iterator = px_node_iterator->px_next_node;
     free(px_node_this);
   }
+  free(px_list);
 }

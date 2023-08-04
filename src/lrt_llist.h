@@ -29,11 +29,8 @@ struct lrt_llist_head
   lrt_llist_node* px_last_node;
 };
 
-// Top-level header
-#include "libruuvitag.h"
 
-
-lrt_llist_head xLrtLlistNew(void);
+lrt_llist_head* pxLrtLlistNew(void);
 
 lrt_llist_node* pxLrtLlistFindNode(lrt_llist_head* px_list,
                                    int i_node_op,
@@ -47,8 +44,8 @@ void vLrtLlistApplyFunc(lrt_llist_head* px_list,
 void vLrtLlistAddNode(lrt_llist_head* px_list,
                       void* v_node_data);
 
-void vLrtLlistRemNode(lrt_llist_head* px_list,
-                      void* v_node_data);
+void vLrtLlistFreeNode(lrt_llist_head* px_list,
+                       void* v_node_data);
 
 void vLrtLlistFreeAll(lrt_llist_head* px_list);
 

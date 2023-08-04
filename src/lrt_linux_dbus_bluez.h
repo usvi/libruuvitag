@@ -3,6 +3,8 @@
 
 
 // Headers needed in crafting our own dbus struct type.
+#include "lrt_llist.h"
+
 #include <inttypes.h>
 #include <semaphore.h>
 #include <pthread.h>
@@ -14,25 +16,29 @@
 // happy and at the same time define strictly the dbus-
 // related stuff here.
 typedef struct lrt_ldb_context_type lrt_ldb_context_type;
-typedef struct lrt_ldb_watch lrt_ldb_watch;
-typedef struct lrt_ldb_timeout lrt_ldb_timeout;
+typedef struct lrt_ldb_node_watch lrt_ldb_node_watch;
+typedef struct lrt_ldb_node_timeout lrt_ldb_node_timeout;
 
 
-struct lrt_ldb_watch
+struct lrt_ldb_node_watch
 {
+  lrt_llist_node* px_prev_node;
+  lrt_llist_node* px_next_node;
+  
   int i_watch_fd;
   uint32_t u32_epoll_event_flags;
   DBusWatch* px_dbus_read_watch;
   DBusWatch* px_dbus_write_watch;
-  lrt_ldb_watch* px_next_watch;
 };
 
-struct lrt_ldb_timeout
+struct lrt_ldb_node_timeout
 {
+  lrt_llist_node* px_prev_node;
+  lrt_llist_node* px_next_node;
+  
   uint8_t u8_enabled;
   int i_timeout_left;
   DBusTimeout* px_dbus_timeout;
-  lrt_ldb_timeout* px_next_timeout;
 };
 
 struct lrt_ldb_context_type
@@ -46,8 +52,13 @@ struct lrt_ldb_context_type
   int i_epoll_fd;
   pthread_t x_evl_thread;
 
+  lrt_llist_head* px_llist_watches;
+  lrt_llist_head* px_llist_timeouts;
+  
+  /*
   lrt_ldb_watch* px_event_watches;
   lrt_ldb_timeout* px_event_timeouts;
+  */
 };
 
 
