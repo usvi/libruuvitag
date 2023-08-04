@@ -15,10 +15,6 @@
 #define NUM_MS_IN_S   (1000)
 #define NUM_US_IN_MS  (1000)
 
-#define LDB_TRUE           (1)
-#define LDB_FALSE          (0)
-#define LDB_UNKNOWN        (2)
-
 #define LDB_SEM_INIT_FAILED                (-1)
 #define LDB_FD_INVALID                     (-1)
 #define LDB_TIMEOUT_INVALID                (-1)
@@ -667,12 +663,18 @@ static uint8_t u8LdbInitDbus(libruuvitag_context_type* px_full_ctx)
 
 
 
+static uint8_t u8DispatchWatchActivity(struct epoll_event* px_epoll_event)
+{
+
+  return LDB_SUCCESS;
+}
 
 
 
 static uint8_t u8EpollWaitAndDispatch(libruuvitag_context_type* px_full_ctx)
 {
   static struct epoll_event ax_epoll_monitor_events[LDB_EPOLL_MONITOR_NUM_EVENTS];
+  struct epoll_event x_epoll_temp_event;
   int i_epoll_fds_ready = 0;
   int i_next_timeout = LDB_TIMEOUT_INVALID;
   int i_epoll_iterator = 0;
@@ -700,25 +702,37 @@ static uint8_t u8EpollWaitAndDispatch(libruuvitag_context_type* px_full_ctx)
         {
           printf("Terminating as requested\n");
 
-          return LDB_FALSE;
+          return LDB_FAIL;
         }
-        else if (u8_main_op == LDB_CONTROL_MAIN_OP_WATCH)
+        else if ((u8_main_op == LDB_CONTROL_MAIN_OP_WATCH) ||
+                 (u8_main_op == LDB_CONTROL_MAIN_OP_TIMEOUT))
+          
         {
-          printf("Watch i_epoll_op=%d  u32_epoll_event_flags=%u  i_control_passed_fd=%d\n",
-                 i_epoll_op, u32_epoll_event_flags, i_control_passed_fd);
+          printf("u8_main_op=%u  i_epoll_op=%d  u32_epoll_event_flags=%u  i_control_passed_fd=%d\n",
+                 u8_main_op, i_epoll_op, u32_epoll_event_flags, i_control_passed_fd);
 
-          return LDB_TRUE;
-        }
-        else if (u8_main_op == LDB_CONTROL_MAIN_OP_TIMEOUT)
-        {
-          printf("Timeout\n");
+          x_epoll_temp_event.events = u32_epoll_event_flags;
+          x_epoll_temp_event.data.fd = i_control_passed_fd;
 
-          return LDB_TRUE;
+          if (epoll_ctl(px_full_ctx->x_ldb.i_epoll_fd, i_epoll_op,
+                        x_epoll_temp_event.data.fd, &x_epoll_temp_event) == LDB_EPOLL_OP_INVALID)
+          {
+            
+            return LDB_FAIL;
+          }
+          printf("Returning true for new epoll ctl\n");
         }
       }
     }
+    else
+    {
+      if (u8DispatchWatchActivity(&(ax_epoll_monitor_events[i_epoll_iterator])) != LDB_SUCCESS)
+      {
+        return LDB_FAIL;
+      }
+    }
   }
-  return LDB_TRUE;
+  return LDB_SUCCESS;
 }
 
 
@@ -730,7 +744,7 @@ static void* vLdbEventLoopBody(void* pv_arg_data)
   int ai_pipe_fds[2];
   // If I read docs correctly, exception fds are not needed.
   // Strange that wpa_supplicant uses them. I am probably reading wrong.
-  uint8_t u8_evl_running = LDB_TRUE;
+  uint8_t u8_evl_running = LDB_SUCCESS;
 
   struct epoll_event x_epoll_temp_event;
 
@@ -791,13 +805,13 @@ static void* vLdbEventLoopBody(void* pv_arg_data)
   // Finally we can release caller
   sem_post(&(px_full_ctx->x_ldb.x_inited_sem));
   
-  while (u8_evl_running == LDB_TRUE)
+  while (u8_evl_running == LDB_SUCCESS)
   {
     sleep(1); // just in case for now
 
     if (u8EpollWaitAndDispatch(px_full_ctx) == LDB_FAIL)
     {
-      u8_evl_running = LDB_FALSE;
+      u8_evl_running = LDB_FAIL;
     }
   }
   // Out of event loop, most probably because we are deinitializing.

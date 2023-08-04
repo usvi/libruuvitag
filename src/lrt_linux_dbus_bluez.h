@@ -71,6 +71,7 @@ struct lrt_ldb_context_type
 #define LDB_SUCCESS        (1)
 #define LDB_FAIL           (0)
 #define LDB_AGAIN          (2)
+#define LDB_UNKNOWN        (3)
 
 
 
