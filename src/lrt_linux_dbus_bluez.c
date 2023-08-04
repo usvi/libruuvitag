@@ -190,9 +190,12 @@ static dbus_bool_t tLdbAddWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
     }
     px_node_watch_new = (lrt_ldb_node_watch*)(pv_malloc_test);
     px_node_watch_new->i_watch_fd = dbus_watch_get_unix_fd(px_dbus_watch);
+    printf("FD %d\n", px_node_watch_new->i_watch_fd);
     px_node_watch_new->u32_epoll_event_flags = LDB_EPOLL_EVENT_FLAGS_NONE;
     px_node_watch_new->px_dbus_read_watch = NULL;
     px_node_watch_new->px_dbus_write_watch = NULL;
+    vLrtLlistAddNode(px_full_ctx->x_ldb.px_llist_watches,
+                     px_node_watch_new);
     // Set iterator to same as the case where the placeholder is existing
     px_node_watch_this = px_node_watch_new;
   }
@@ -202,11 +205,13 @@ static dbus_bool_t tLdbAddWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
   }
   if (dbus_watch_get_flags(px_dbus_watch) == DBUS_WATCH_READABLE)
   {
+    printf("Readable\n");
     px_node_watch_this->px_dbus_read_watch = px_dbus_watch;
     px_node_watch_this->u32_epoll_event_flags |= EPOLLIN;
   }
-  else if (dbus_watch_get_flags(px_dbus_watch) == DBUS_WATCH_READABLE)
+  else if (dbus_watch_get_flags(px_dbus_watch) == DBUS_WATCH_WRITABLE)
   {
+    printf("Writeable\n");
     px_node_watch_this->px_dbus_write_watch = px_dbus_watch;
     px_node_watch_this->u32_epoll_event_flags |= EPOLLOUT;
   }
@@ -377,6 +382,8 @@ static dbus_bool_t tLdbAddTimeout(DBusTimeout* px_dbus_timeout, void* pv_arg_dat
     }
     px_node_timeout_new = (lrt_ldb_node_timeout*)(pv_malloc_test);
     px_node_timeout_new->px_dbus_timeout = px_dbus_timeout;
+    vLrtLlistAddNode(px_full_ctx->x_ldb.px_llist_timeouts,
+                     px_node_timeout_new);
     // Assign to common
     px_node_timeout_this = px_node_timeout_new;
   }
@@ -659,6 +666,10 @@ static uint8_t u8LdbInitDbus(libruuvitag_context_type* px_full_ctx)
 }
 
 
+
+
+
+
 static uint8_t u8EpollWaitAndDispatch(libruuvitag_context_type* px_full_ctx)
 {
   static struct epoll_event ax_epoll_monitor_events[LDB_EPOLL_MONITOR_NUM_EVENTS];
@@ -691,11 +702,26 @@ static uint8_t u8EpollWaitAndDispatch(libruuvitag_context_type* px_full_ctx)
 
           return LDB_FALSE;
         }
+        else if (u8_main_op == LDB_CONTROL_MAIN_OP_WATCH)
+        {
+          printf("Watch i_epoll_op=%d  u32_epoll_event_flags=%u  i_control_passed_fd=%d\n",
+                 i_epoll_op, u32_epoll_event_flags, i_control_passed_fd);
+
+          return LDB_TRUE;
+        }
+        else if (u8_main_op == LDB_CONTROL_MAIN_OP_TIMEOUT)
+        {
+          printf("Timeout\n");
+
+          return LDB_TRUE;
+        }
       }
     }
   }
   return LDB_TRUE;
 }
+
+
 
 
 static void* vLdbEventLoopBody(void* pv_arg_data)
