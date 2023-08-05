@@ -186,12 +186,15 @@ static dbus_bool_t tLdbAddWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
     }
     px_node_watch_new = (lrt_ldb_node_watch*)(pv_malloc_test);
     px_node_watch_new->i_watch_fd = dbus_watch_get_unix_fd(px_dbus_watch);
-    printf("FD %d\n", px_node_watch_new->i_watch_fd);
     px_node_watch_new->u32_epoll_event_flags = LDB_EPOLL_EVENT_FLAGS_NONE;
     px_node_watch_new->px_dbus_read_watch = NULL;
     px_node_watch_new->px_dbus_write_watch = NULL;
     vLrtLlistAddNode(px_full_ctx->x_ldb.px_llist_watches,
                      px_node_watch_new);
+    // Set main context as retrievable data in case we need it in handling
+    // (we could do this also manually and actually previously did, but this
+    // is just more convenient).
+    dbus_watch_set_data(px_dbus_watch, px_full_ctx, NULL);
     // Set iterator to same as the case where the placeholder is existing
     px_node_watch_this = px_node_watch_new;
   }
@@ -201,15 +204,33 @@ static dbus_bool_t tLdbAddWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
   }
   if (dbus_watch_get_flags(px_dbus_watch) & DBUS_WATCH_READABLE)
   {
-    printf("Readable\n");
     px_node_watch_this->px_dbus_read_watch = px_dbus_watch;
-    px_node_watch_this->u32_epoll_event_flags |= EPOLLIN;
+
+    if (dbus_watch_get_enabled(px_dbus_watch) == TRUE)
+    {
+      printf("Adding enabled readable watch\n");
+      px_node_watch_this->u32_epoll_event_flags |= EPOLLIN;
+    }
+    else
+    {
+      printf("Adding disabled readable watch\n");
+      px_node_watch_this->u32_epoll_event_flags &= ~EPOLLIN;
+    }
   }
   if (dbus_watch_get_flags(px_dbus_watch) & DBUS_WATCH_WRITABLE)
   {
-    printf("Writeable\n");
     px_node_watch_this->px_dbus_write_watch = px_dbus_watch;
-    px_node_watch_this->u32_epoll_event_flags |= EPOLLOUT;
+    
+    if (dbus_watch_get_enabled(px_dbus_watch) == TRUE)
+    {
+      printf("Adding enabled writable watch\n");
+      px_node_watch_this->u32_epoll_event_flags |= EPOLLOUT;
+    }
+    else
+    {
+      printf("Adding disabled writable watch\n");
+      px_node_watch_this->u32_epoll_event_flags &= ~EPOLLOUT;
+    }
   }
   if (i_epoll_op != LDB_EPOLL_OP_INVALID)
   {
@@ -308,7 +329,7 @@ static void vLdbToggleWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
   {
     if (dbus_watch_get_flags(px_dbus_watch) & DBUS_WATCH_READABLE)
     {
-      if (dbus_watch_get_enabled(px_dbus_watch))
+      if (dbus_watch_get_enabled(px_dbus_watch) == TRUE)
       {
         px_node_watch_this->u32_epoll_event_flags |= EPOLLIN;
       }
@@ -319,7 +340,7 @@ static void vLdbToggleWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
     }
     else if (dbus_watch_get_flags(px_dbus_watch) & DBUS_WATCH_WRITABLE)
     {
-      if (dbus_watch_get_enabled(px_dbus_watch))
+      if (dbus_watch_get_enabled(px_dbus_watch) == TRUE)
       {
         px_node_watch_this->u32_epoll_event_flags |= EPOLLOUT;
       }
@@ -380,6 +401,8 @@ static dbus_bool_t tLdbAddTimeout(DBusTimeout* px_dbus_timeout, void* pv_arg_dat
     px_node_timeout_new->px_dbus_timeout = px_dbus_timeout;
     vLrtLlistAddNode(px_full_ctx->x_ldb.px_llist_timeouts,
                      px_node_timeout_new);
+    // Also for timeouts, set context data for easier retrieval
+    dbus_timeout_set_data(px_dbus_timeout, px_full_ctx, NULL);
     // Assign to common
     px_node_timeout_this = px_node_timeout_new;
   }
@@ -387,11 +410,13 @@ static dbus_bool_t tLdbAddTimeout(DBusTimeout* px_dbus_timeout, void* pv_arg_dat
   // px_event_timeout_iterator is now proper, we can do now stuff
   if (dbus_timeout_get_enabled(px_node_timeout_this->px_dbus_timeout) == TRUE)
   {
+    px_node_timeout_this->u8_enabled = LDB_TRUE;
     px_node_timeout_this->i_timeout_left =
       dbus_timeout_get_interval(px_node_timeout_this->px_dbus_timeout);
   }
   else
   {
+    px_node_timeout_this->u8_enabled = LDB_FALSE;
     px_node_timeout_this->i_timeout_left = LDB_TIMEOUT_INVALID;
   }
   vLdbWriteControl(px_full_ctx,
@@ -450,6 +475,7 @@ static void vLdbToggleTimeout(DBusTimeout* px_dbus_timeout, void* pv_arg_data)
     if ((dbus_timeout_get_enabled(px_dbus_timeout) == TRUE) &&
         (dbus_timeout_get_enabled(px_node_timeout_this->px_dbus_timeout) == FALSE))
     {
+      px_node_timeout_this->u8_enabled = LDB_TRUE;
       px_node_timeout_this->i_timeout_left =
         dbus_timeout_get_interval(px_node_timeout_this->px_dbus_timeout);
       vLdbWriteControl(px_full_ctx,
@@ -461,6 +487,7 @@ static void vLdbToggleTimeout(DBusTimeout* px_dbus_timeout, void* pv_arg_data)
     else if ((dbus_timeout_get_enabled(px_dbus_timeout) == FALSE) &&
              (dbus_timeout_get_enabled(px_node_timeout_this->px_dbus_timeout) == TRUE))
     {
+      px_node_timeout_this->u8_enabled = LDB_FALSE;
       px_node_timeout_this->i_timeout_left = LDB_TIMEOUT_INVALID;
       vLdbWriteControl(px_full_ctx,
                        LDB_CONTROL_MAIN_OP_TIMEOUT,
@@ -662,39 +689,25 @@ static uint8_t u8LdbInitDbus(libruuvitag_context_type* px_full_ctx)
 }
 
 
-static int iDispatchDbusWatchFromEpollEvent(lrt_llist_node* px_list_node, void* pv_epoll_event_data, void* pv_full_ctx_data )
+static int iDispatchDbusWatchFromEpollEvent(lrt_llist_node* px_list_node, void* pv_epoll_event_data)
 {
   lrt_ldb_node_watch* px_node_watch = NULL;
   struct epoll_event* px_epoll_event = NULL;
-  libruuvitag_context_type* px_full_ctx = NULL;
 
   px_node_watch = (lrt_ldb_node_watch*)px_list_node;
   px_epoll_event = (struct epoll_event*)pv_epoll_event_data;
-  px_full_ctx = (libruuvitag_context_type*)pv_full_ctx_data;
 
-  printf("Comparing fds %d vs %d    and flags %u vs %u\n",
-         px_node_watch->i_watch_fd, px_epoll_event->data.fd,
-         px_node_watch->u32_epoll_event_flags, px_epoll_event->events);
-  
   if (px_node_watch->i_watch_fd == px_epoll_event->data.fd)
   {
-    
     if ((px_epoll_event->events & EPOLLIN) & (px_node_watch->u32_epoll_event_flags))
     {
       printf("HANDLING READ\n");
-      //dbus_watch_handle(px_node_watch->px_dbus_read_watch, DBUS_WATCH_READABLE);
+      dbus_watch_handle(px_node_watch->px_dbus_read_watch, DBUS_WATCH_READABLE);
     }
-
-
-    
     if ((px_epoll_event->events & EPOLLOUT) & (px_node_watch->u32_epoll_event_flags))
     {
-      printf("HANDLING WRITE \n");
-      if (dbus_watch_handle(px_node_watch->px_dbus_write_watch, DBUS_WATCH_WRITABLE) == FALSE)
-      {
-        printf("WRITE HANDLER WAS FALSE\n");
-      }
-      dbus_connection_flush(px_full_ctx->x_ldb.px_dbus_conn);
+      printf("Handling WRITE\n");
+      dbus_watch_handle(px_node_watch->px_dbus_write_watch, DBUS_WATCH_WRITABLE);
     }
   }
   
@@ -720,12 +733,9 @@ static uint8_t u8EpollWaitAndDispatch(libruuvitag_context_type* px_full_ctx)
   
   i_epoll_fds_ready = epoll_wait(px_full_ctx->x_ldb.i_epoll_fd, ax_epoll_monitor_events,
                                  LDB_EPOLL_MONITOR_NUM_EVENTS, i_next_timeout);
-  printf("Epoll got %d fds\n", i_epoll_fds_ready);
 
   for (i_epoll_iterator = 0; i_epoll_iterator < i_epoll_fds_ready; i_epoll_iterator++)
   {
-    printf(" %d\n", ax_epoll_monitor_events[i_epoll_iterator].data.fd);
-
     if (ax_epoll_monitor_events[i_epoll_iterator].data.fd ==
         px_full_ctx->x_ldb.i_evl_control_read_fd)
     {
@@ -738,13 +748,12 @@ static uint8_t u8EpollWaitAndDispatch(libruuvitag_context_type* px_full_ctx)
 
           return LDB_FAIL;
         }
-        else if ((u8_main_op == LDB_CONTROL_MAIN_OP_WATCH) ||
-                 (u8_main_op == LDB_CONTROL_MAIN_OP_TIMEOUT))
-          
+        else if (u8_main_op == LDB_CONTROL_MAIN_OP_WATCH)
         {
+          /*
           printf("u8_main_op=%u  i_epoll_op=%d  u32_epoll_event_flags=%u  i_control_passed_fd=%d\n",
                  u8_main_op, i_epoll_op, u32_epoll_event_flags, i_control_passed_fd);
-
+          */
           x_epoll_temp_event.events = u32_epoll_event_flags;
           x_epoll_temp_event.data.fd = i_control_passed_fd;
 
@@ -754,18 +763,17 @@ static uint8_t u8EpollWaitAndDispatch(libruuvitag_context_type* px_full_ctx)
             return LDB_FAIL;
           }
         }
+        else if (u8_main_op == LDB_CONTROL_MAIN_OP_TIMEOUT)
+        {
+          // Handled more or lessa utomatically
+        }
       }
     }
     else
     {
-      printf("AAAAAAAA it=%d  fd=%d  flags=%u\n",
-             i_epoll_iterator,
-             ax_epoll_monitor_events[i_epoll_iterator].data.fd,
-             ax_epoll_monitor_events[i_epoll_iterator].events);
       vLrtLlistApplyFunc(px_full_ctx->x_ldb.px_llist_watches,
                          iDispatchDbusWatchFromEpollEvent,
-                         &(ax_epoll_monitor_events[i_epoll_iterator]),
-                         px_full_ctx);
+                         &(ax_epoll_monitor_events[i_epoll_iterator]));
     }
   }
   return LDB_SUCCESS;

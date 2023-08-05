@@ -87,9 +87,8 @@ lrt_llist_node* pxLrtLlistFindNode(lrt_llist_head* px_list,
 
 
 void vLrtLlistApplyFunc(lrt_llist_head* px_list,
-                        int (*iApplyFunc)(lrt_llist_node*, void*, void*),
-                        void* pv_user_data1,
-                        void* pv_user_data2)
+                        int (*iApplyFunc)(lrt_llist_node*, void*),
+                        void* pv_user_data)
 {
   lrt_llist_node* px_node_iterator = NULL;
 
@@ -97,7 +96,7 @@ void vLrtLlistApplyFunc(lrt_llist_head* px_list,
   
   while (px_node_iterator != NULL)
   {
-    iApplyFunc(px_node_iterator, pv_user_data1, pv_user_data2);
+    iApplyFunc(px_node_iterator, pv_user_data);
     px_node_iterator = px_node_iterator->px_next_node;
   }
 }
