@@ -199,13 +199,13 @@ static dbus_bool_t tLdbAddWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
   { 
     i_epoll_op = EPOLL_CTL_MOD;
   }
-  if (dbus_watch_get_flags(px_dbus_watch) == DBUS_WATCH_READABLE)
+  if (dbus_watch_get_flags(px_dbus_watch) & DBUS_WATCH_READABLE)
   {
     printf("Readable\n");
     px_node_watch_this->px_dbus_read_watch = px_dbus_watch;
     px_node_watch_this->u32_epoll_event_flags |= EPOLLIN;
   }
-  else if (dbus_watch_get_flags(px_dbus_watch) == DBUS_WATCH_WRITABLE)
+  if (dbus_watch_get_flags(px_dbus_watch) & DBUS_WATCH_WRITABLE)
   {
     printf("Writeable\n");
     px_node_watch_this->px_dbus_write_watch = px_dbus_watch;
@@ -306,7 +306,7 @@ static void vLdbToggleWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
 
   if (px_node_watch_this != NULL)
   {
-    if (dbus_watch_get_flags(px_dbus_watch) == DBUS_WATCH_READABLE)
+    if (dbus_watch_get_flags(px_dbus_watch) & DBUS_WATCH_READABLE)
     {
       if (dbus_watch_get_enabled(px_dbus_watch))
       {
@@ -317,7 +317,7 @@ static void vLdbToggleWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
         px_node_watch_this->u32_epoll_event_flags &= ~EPOLLIN;
       }
     }
-    else if (dbus_watch_get_flags(px_dbus_watch) == DBUS_WATCH_WRITABLE)
+    else if (dbus_watch_get_flags(px_dbus_watch) & DBUS_WATCH_WRITABLE)
     {
       if (dbus_watch_get_enabled(px_dbus_watch))
       {
@@ -662,25 +662,39 @@ static uint8_t u8LdbInitDbus(libruuvitag_context_type* px_full_ctx)
 }
 
 
-static int iDispatchDbusWatchFromEpollEvent(lrt_llist_node* px_list_node, void* pv_epoll_event_data)
+static int iDispatchDbusWatchFromEpollEvent(lrt_llist_node* px_list_node, void* pv_epoll_event_data, void* pv_full_ctx_data )
 {
   lrt_ldb_node_watch* px_node_watch = NULL;
   struct epoll_event* px_epoll_event = NULL;
+  libruuvitag_context_type* px_full_ctx = NULL;
 
   px_node_watch = (lrt_ldb_node_watch*)px_list_node;
   px_epoll_event = (struct epoll_event*)pv_epoll_event_data;
+  px_full_ctx = (libruuvitag_context_type*)pv_full_ctx_data;
 
+  printf("Comparing fds %d vs %d    and flags %u vs %u\n",
+         px_node_watch->i_watch_fd, px_epoll_event->data.fd,
+         px_node_watch->u32_epoll_event_flags, px_epoll_event->events);
+  
   if (px_node_watch->i_watch_fd == px_epoll_event->data.fd)
   {
+    
     if ((px_epoll_event->events & EPOLLIN) & (px_node_watch->u32_epoll_event_flags))
     {
-      printf("Dbus-distpatching read\n");
-      dbus_watch_handle(px_node_watch->px_dbus_read_watch, DBUS_WATCH_READABLE);
+      printf("HANDLING READ\n");
+      //dbus_watch_handle(px_node_watch->px_dbus_read_watch, DBUS_WATCH_READABLE);
     }
+
+
+    
     if ((px_epoll_event->events & EPOLLOUT) & (px_node_watch->u32_epoll_event_flags))
     {
-      printf("Dbus-distpatching write\n");
-      dbus_watch_handle(px_node_watch->px_dbus_write_watch, DBUS_WATCH_WRITABLE);
+      printf("HANDLING WRITE \n");
+      if (dbus_watch_handle(px_node_watch->px_dbus_write_watch, DBUS_WATCH_WRITABLE) == FALSE)
+      {
+        printf("WRITE HANDLER WAS FALSE\n");
+      }
+      dbus_connection_flush(px_full_ctx->x_ldb.px_dbus_conn);
     }
   }
   
@@ -737,18 +751,21 @@ static uint8_t u8EpollWaitAndDispatch(libruuvitag_context_type* px_full_ctx)
           if (epoll_ctl(px_full_ctx->x_ldb.i_epoll_fd, i_epoll_op,
                         x_epoll_temp_event.data.fd, &x_epoll_temp_event) == LDB_EPOLL_OP_INVALID)
           {
-            
             return LDB_FAIL;
           }
-          printf("Returning true for new epoll ctl\n");
         }
       }
     }
     else
     {
+      printf("AAAAAAAA it=%d  fd=%d  flags=%u\n",
+             i_epoll_iterator,
+             ax_epoll_monitor_events[i_epoll_iterator].data.fd,
+             ax_epoll_monitor_events[i_epoll_iterator].events);
       vLrtLlistApplyFunc(px_full_ctx->x_ldb.px_llist_watches,
                          iDispatchDbusWatchFromEpollEvent,
-                         &(ax_epoll_monitor_events[i_epoll_iterator]));
+                         &(ax_epoll_monitor_events[i_epoll_iterator]),
+                         px_full_ctx);
     }
   }
   return LDB_SUCCESS;

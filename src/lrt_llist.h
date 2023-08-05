@@ -38,8 +38,9 @@ lrt_llist_node* pxLrtLlistFindNode(lrt_llist_head* px_list,
                                    void* v_search_node_data);
 
 void vLrtLlistApplyFunc(lrt_llist_head* px_list,
-                        int (*iApplyFunc)(lrt_llist_node*, void*),
-                        void* pv_user_data);
+                        int (*iApplyFunc)(lrt_llist_node*, void*, void*),
+                        void* pv_user_data1,
+                        void* pv_user_data2);
 
 
 void vLrtLlistAddNode(lrt_llist_head* px_list,
