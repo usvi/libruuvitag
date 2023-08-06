@@ -48,15 +48,16 @@
   "path='/'"
 
 #define LDB_INITED_FLAGS_NONE                    (((uint32_t)0) << 0)
-#define LDB_INITED_FLAGS_CTRL_PIPE               (((uint32_t)1) << 0)
-#define LDB_INITED_FLAGS_EPOLL_CREATED           (((uint32_t)1) << 1)
-#define LDB_INITED_FLAGS_EPOLL_CTRL_PIPE_ADDED   (((uint32_t)1) << 2)
-#define LDB_INITED_FLAGS_CONN                    (((uint32_t)1) << 3)
-#define LDB_INITED_FLAGS_IFACES_ADDED            (((uint32_t)1) << 4)
-#define LDB_INITED_FLAGS_IFACES_REMOVED          (((uint32_t)1) << 5)
-#define LDB_INITED_FLAGS_WATCHES_ADDED           (((uint32_t)1) << 6)
-#define LDB_INITED_FLAGS_TIMEOUTS_ADDED          (((uint32_t)1) << 7)
-#define LDB_INITED_FLAGS_CORELOOP_RUNNING        (((uint32_t)1) << 8)
+#define LDB_INITED_FLAGS_LINKED_LISTS            (((uint32_t)1) << 0)
+#define LDB_INITED_FLAGS_CTRL_PIPE               (((uint32_t)1) << 1)
+#define LDB_INITED_FLAGS_EPOLL_CREATED           (((uint32_t)1) << 2)
+#define LDB_INITED_FLAGS_EPOLL_CTRL_PIPE_ADDED   (((uint32_t)1) << 3)
+#define LDB_INITED_FLAGS_CONN                    (((uint32_t)1) << 4)
+#define LDB_INITED_FLAGS_IFACES_ADDED            (((uint32_t)1) << 5)
+#define LDB_INITED_FLAGS_IFACES_REMOVED          (((uint32_t)1) << 6)
+#define LDB_INITED_FLAGS_WATCHES_ADDED           (((uint32_t)1) << 7)
+#define LDB_INITED_FLAGS_TIMEOUTS_ADDED          (((uint32_t)1) << 8)
+#define LDB_INITED_FLAGS_CORELOOP_RUNNING        (((uint32_t)1) << 9)
 
 
 
@@ -297,7 +298,7 @@ static void vLdbRemoveWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
 	  (px_node_watch_this->px_dbus_write_watch == NULL))
     {
       // Final event removed, removing container
-      printf("Removing watch container");
+      printf("Removing watch container\n");
       i_epoll_op = EPOLL_CTL_DEL; // Overridden
 
       vLrtLlistFreeNode(px_full_ctx->x_ldb.px_llist_watches,
@@ -518,35 +519,30 @@ static void vLdbDeinitEventLoopWithDbus(libruuvitag_context_type* px_full_ctx)
   // Coreloop
   if (px_full_ctx->x_ldb.u32_inited_flags & LDB_INITED_FLAGS_CORELOOP_RUNNING)
   {
-    printf("Deiniting coreloop\n");
     // DOes nothing, but for sanity.
     px_full_ctx->x_ldb.u32_inited_flags &= ~LDB_INITED_FLAGS_CORELOOP_RUNNING;
   }
+  // Pending calls
 
   // Timeouts
   if (px_full_ctx->x_ldb.u32_inited_flags & LDB_INITED_FLAGS_TIMEOUTS_ADDED)
   {
-    printf("Deiniting timeouts\n");
     dbus_connection_set_timeout_functions(px_full_ctx->x_ldb.px_dbus_conn,
 					  NULL, NULL, NULL, NULL, NULL);
-    vLrtLlistFreeAll(px_full_ctx->x_ldb.px_llist_timeouts);
     px_full_ctx->x_ldb.u32_inited_flags &= ~LDB_INITED_FLAGS_TIMEOUTS_ADDED;
   }
 
   // Watches
   if (px_full_ctx->x_ldb.u32_inited_flags & LDB_INITED_FLAGS_WATCHES_ADDED)
   {
-    printf("Deiniting watches\n");
     dbus_connection_set_watch_functions(px_full_ctx->x_ldb.px_dbus_conn,
 					  NULL, NULL, NULL, NULL, NULL);
-    vLrtLlistFreeAll(px_full_ctx->x_ldb.px_llist_watches);
     px_full_ctx->x_ldb.u32_inited_flags &= ~LDB_INITED_FLAGS_WATCHES_ADDED;
   }
 
   // Interfaces removed subscription
   if (px_full_ctx->x_ldb.u32_inited_flags & LDB_INITED_FLAGS_IFACES_REMOVED)
   {
-    printf("Deiniting interfaces removed\n");
     dbus_bus_remove_match(px_full_ctx->x_ldb.px_dbus_conn,
 			  LDB_SIGNAL_DEF_INTERFACES_REMOVED,
 			  NULL);
@@ -558,7 +554,6 @@ static void vLdbDeinitEventLoopWithDbus(libruuvitag_context_type* px_full_ctx)
   // Interfaces added subscription
   if (px_full_ctx->x_ldb.u32_inited_flags & LDB_INITED_FLAGS_IFACES_ADDED)
   {
-    printf("Deiniting interfaces added\n");
     dbus_bus_remove_match(px_full_ctx->x_ldb.px_dbus_conn,
 			  LDB_SIGNAL_DEF_INTERFACES_ADDED,
 			  NULL);
@@ -573,7 +568,6 @@ static void vLdbDeinitEventLoopWithDbus(libruuvitag_context_type* px_full_ctx)
   // The actual dbus connection
   if (px_full_ctx->x_ldb.u32_inited_flags & LDB_INITED_FLAGS_CONN)
   {
-    printf("Deiniting dbus connection\n");
     dbus_connection_flush(px_full_ctx->x_ldb.px_dbus_conn);
     dbus_connection_unref(px_full_ctx->x_ldb.px_dbus_conn);
     px_full_ctx->x_ldb.u32_inited_flags &= ~LDB_INITED_FLAGS_CONN;
@@ -582,7 +576,6 @@ static void vLdbDeinitEventLoopWithDbus(libruuvitag_context_type* px_full_ctx)
   // Remove control pipe from epoll
   if (px_full_ctx->x_ldb.u32_inited_flags & LDB_INITED_FLAGS_EPOLL_CTRL_PIPE_ADDED)
   {
-    printf("Removing control pipe from epoll\n");
     x_epoll_temp_event.events = 0;
     x_epoll_temp_event.data.fd = px_full_ctx->x_ldb.i_evl_control_read_fd;
     epoll_ctl(px_full_ctx->x_ldb.i_epoll_fd, EPOLL_CTL_DEL,
@@ -593,7 +586,6 @@ static void vLdbDeinitEventLoopWithDbus(libruuvitag_context_type* px_full_ctx)
   // Remove the epoll structure itself
   if (px_full_ctx->x_ldb.u32_inited_flags & LDB_INITED_FLAGS_EPOLL_CREATED)
   {
-    printf("Removing epoll structure\n");
     close(px_full_ctx->x_ldb.i_epoll_fd);
     px_full_ctx->x_ldb.u32_inited_flags &= ~LDB_INITED_FLAGS_EPOLL_CREATED;
   }
@@ -601,10 +593,18 @@ static void vLdbDeinitEventLoopWithDbus(libruuvitag_context_type* px_full_ctx)
   // Control pipe
   if (px_full_ctx->x_ldb.u32_inited_flags & LDB_INITED_FLAGS_CTRL_PIPE)
   {
-    printf("Deiniting control pipe fds\n");
     close(px_full_ctx->x_ldb.i_evl_control_write_fd);
     close(px_full_ctx->x_ldb.i_evl_control_read_fd);
     px_full_ctx->x_ldb.u32_inited_flags &= ~LDB_INITED_FLAGS_CTRL_PIPE;
+  }
+
+  // Linked lists
+  if (px_full_ctx->x_ldb.u32_inited_flags & LDB_INITED_FLAGS_LINKED_LISTS)
+  {
+    vLrtLlistFreeAll(px_full_ctx->x_ldb.px_llist_pending_calls);
+    vLrtLlistFreeAll(px_full_ctx->x_ldb.px_llist_timeouts);
+    vLrtLlistFreeAll(px_full_ctx->x_ldb.px_llist_watches);
+    px_full_ctx->x_ldb.u32_inited_flags &= ~LDB_INITED_FLAGS_LINKED_LISTS;
   }
 }
 
@@ -774,6 +774,7 @@ static uint8_t u8EpollWaitAndDispatch(libruuvitag_context_type* px_full_ctx)
                  u8_main_op, i_epoll_op, u32_epoll_event_flags, i_control_passed_fd);
           */
           x_epoll_temp_event.events = u32_epoll_event_flags;
+          x_epoll_temp_event.data.ptr = NULL;
           x_epoll_temp_event.data.fd = i_control_passed_fd;
 
           if (epoll_ctl(px_full_ctx->x_ldb.i_epoll_fd, i_epoll_op,
@@ -841,6 +842,7 @@ static void* vLdbEventLoopBody(void* pv_arg_data)
   
   // Add the control pipe to epoll interest list. Rest is added inside the loop.
   x_epoll_temp_event.events = EPOLLIN;
+  x_epoll_temp_event.data.ptr = NULL;
   x_epoll_temp_event.data.fd = px_full_ctx->x_ldb.i_evl_control_read_fd;
 
   if (epoll_ctl(px_full_ctx->x_ldb.i_epoll_fd, EPOLL_CTL_ADD,
@@ -887,15 +889,14 @@ static void* vLdbEventLoopBody(void* pv_arg_data)
 
 static uint8_t u8LdbInitLocalContext(libruuvitag_context_type* px_full_ctx)
 {
+  px_full_ctx->x_ldb.u32_inited_flags = LDB_INITED_FLAGS_NONE;
   px_full_ctx->x_ldb.i_evl_control_write_fd = LDB_FD_INVALID;
   px_full_ctx->x_ldb.i_evl_control_read_fd = LDB_FD_INVALID;
   px_full_ctx->x_ldb.i_epoll_fd = LDB_FD_INVALID;
   px_full_ctx->x_ldb.px_llist_watches = pxLrtLlistNew();
   px_full_ctx->x_ldb.px_llist_timeouts = pxLrtLlistNew();
   px_full_ctx->x_ldb.px_llist_pending_calls = pxLrtLlistNew();
-  px_full_ctx->x_ldb.u32_inited_flags = LDB_INITED_FLAGS_NONE;
-  
-
+  px_full_ctx->x_ldb.u32_inited_flags |= LDB_INITED_FLAGS_LINKED_LISTS;
 
   if (sem_init(&(px_full_ctx->x_ldb.x_inited_sem), 0, 0) == LDB_SEM_INIT_FAILED)
   {
