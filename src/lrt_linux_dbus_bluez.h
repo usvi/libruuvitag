@@ -18,6 +18,7 @@
 typedef struct lrt_ldb_context_type lrt_ldb_context_type;
 typedef struct lrt_ldb_node_watch lrt_ldb_node_watch;
 typedef struct lrt_ldb_node_timeout lrt_ldb_node_timeout;
+typedef struct lrt_ldb_node_pending_call lrt_ldb_node_pending_call;
 
 
 struct lrt_ldb_node_watch
@@ -41,6 +42,14 @@ struct lrt_ldb_node_timeout
   DBusTimeout* px_dbus_timeout;
 };
 
+struct lrt_ldb_node_pending_call
+{
+  lrt_llist_node* px_prev_node;
+  lrt_llist_node* px_next_node;
+  
+  DBusPendingCall* px_dbus_pending_call;
+};
+
 struct lrt_ldb_context_type
 {
   DBusConnection* px_dbus_conn;
@@ -54,7 +63,7 @@ struct lrt_ldb_context_type
 
   lrt_llist_head* px_llist_watches;
   lrt_llist_head* px_llist_timeouts;
-  
+  lrt_llist_head* px_llist_pending_calls;
   /*
   lrt_ldb_watch* px_event_watches;
   lrt_ldb_timeout* px_event_timeouts;

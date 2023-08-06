@@ -27,8 +27,13 @@
 #define LDB_CONTROL_MAIN_OP_TERMINATE      (1)
 #define LDB_CONTROL_MAIN_OP_WATCH          (2)
 #define LDB_CONTROL_MAIN_OP_TIMEOUT        (3)
+#define LDB_CONTROL_MAIN_OP_RECEIVERS      (4)
 
 #define LDB_CONTROL_NO_OP                  (0)
+
+#define LDB_COMPARE_NEGATIVE               (-1)
+#define LDB_COMPARE_NEUTRAL                (0)
+#define LDB_COMPARE_POSITIVE               (1)
 
 #define LDB_SIGNAL_DEF_INTERFACES_ADDED \
   "type='signal',"\
@@ -116,6 +121,10 @@ static uint8_t u8LdbReadControl(libruuvitag_context_type* px_full_ctx,
     {
       return LDB_SUCCESS;
     }
+    else if ((*pu8_main_op) == LDB_CONTROL_MAIN_OP_RECEIVERS)
+    {
+      return LDB_SUCCESS;
+    }
     else if ((*pu8_main_op) == LDB_CONTROL_MAIN_OP_WATCH)
     {
       if ((sizeof(int) == read(px_full_ctx->x_ldb.i_evl_control_read_fd,
@@ -143,10 +152,10 @@ static int iCompareNodeAndDbusWatchFds(lrt_llist_node* px_list_node, void* pv_db
   if (((lrt_ldb_node_watch*)px_list_node)->i_watch_fd ==
       dbus_watch_get_unix_fd((DBusWatch*)pv_dbus_watch_data))
   {
-    return 0;
+    return LDB_COMPARE_NEUTRAL;
   }
   
-  return -1;
+  return LDB_COMPARE_NEGATIVE;
 }
 
 
@@ -366,10 +375,10 @@ static int iCompareNodeAndDbusTimeout(lrt_llist_node* px_list_node, void* pv_dbu
   if (((DBusWatch*)(((lrt_ldb_node_timeout*)px_list_node)->px_dbus_timeout)) ==
       ((DBusWatch*)pv_dbus_timeout_data))
   {
-    return 0;
+    return LDB_COMPARE_NEUTRAL;
   }
   
-  return -1;
+  return LDB_COMPARE_NEGATIVE;
 }
 
 
@@ -722,6 +731,8 @@ static uint8_t u8EpollWaitAndDispatch(libruuvitag_context_type* px_full_ctx)
 {
   static struct epoll_event ax_epoll_monitor_events[LDB_EPOLL_MONITOR_NUM_EVENTS];
   struct epoll_event x_epoll_temp_event;
+  struct timespec x_wait_start;
+  struct timespec x_wait_end;
   int i_epoll_fds_ready = 0;
   int i_next_timeout = LDB_TIMEOUT_INVALID;
   int i_epoll_iterator = 0;
@@ -730,9 +741,13 @@ static uint8_t u8EpollWaitAndDispatch(libruuvitag_context_type* px_full_ctx)
   int i_epoll_op = LDB_EPOLL_OP_INVALID;
   uint32_t u32_epoll_event_flags = LDB_EPOLL_EVENT_FLAGS_NONE;
   int i_control_passed_fd = LDB_FD_INVALID;
+
   
+  //clock_gettime(CLOCK_MONOTONIC, 
   i_epoll_fds_ready = epoll_wait(px_full_ctx->x_ldb.i_epoll_fd, ax_epoll_monitor_events,
                                  LDB_EPOLL_MONITOR_NUM_EVENTS, i_next_timeout);
+
+
 
   for (i_epoll_iterator = 0; i_epoll_iterator < i_epoll_fds_ready; i_epoll_iterator++)
   {
@@ -747,6 +762,10 @@ static uint8_t u8EpollWaitAndDispatch(libruuvitag_context_type* px_full_ctx)
           printf("Terminating as requested\n");
 
           return LDB_FAIL;
+        }
+        else if (u8_main_op == LDB_CONTROL_MAIN_OP_RECEIVERS)
+        {
+          printf("Scanning for receivers\n");
         }
         else if (u8_main_op == LDB_CONTROL_MAIN_OP_WATCH)
         {
@@ -851,7 +870,7 @@ static void* vLdbEventLoopBody(void* pv_arg_data)
   
   while (u8_evl_running == LDB_SUCCESS)
   {
-    sleep(1); // just in case for now
+    //sleep(1); // just in case for now
 
     if (u8EpollWaitAndDispatch(px_full_ctx) == LDB_FAIL)
     {
@@ -873,6 +892,7 @@ static uint8_t u8LdbInitLocalContext(libruuvitag_context_type* px_full_ctx)
   px_full_ctx->x_ldb.i_epoll_fd = LDB_FD_INVALID;
   px_full_ctx->x_ldb.px_llist_watches = pxLrtLlistNew();
   px_full_ctx->x_ldb.px_llist_timeouts = pxLrtLlistNew();
+  px_full_ctx->x_ldb.px_llist_pending_calls = pxLrtLlistNew();
   px_full_ctx->x_ldb.u32_inited_flags = LDB_INITED_FLAGS_NONE;
   
 
@@ -890,6 +910,12 @@ static uint8_t u8LdbInitEventLoopWithDbus(libruuvitag_context_type* px_full_ctx)
   pthread_create(&(px_full_ctx->x_ldb.x_evl_thread), NULL, vLdbEventLoopBody, px_full_ctx);
   // Need to wait here until semaphore to get the status, be it anything
   sem_wait(&(px_full_ctx->x_ldb.x_inited_sem));
+  sleep(1); // Sleep before asking receivers rehash
+  vLdbWriteControl(px_full_ctx,
+                   LDB_CONTROL_MAIN_OP_RECEIVERS,
+                   LDB_EPOLL_OP_INVALID,
+                   LDB_EPOLL_EVENT_FLAGS_NONE,
+                   LDB_FD_INVALID);
   
   return LDB_SUCCESS;
 }
