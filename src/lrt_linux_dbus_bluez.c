@@ -47,6 +47,12 @@
   "member='InterfacesRemoved',"\
   "path='/'"
 
+#define LDB_METHOD_CALL_QUERY_RECEIVERS_DEF_DEST     "org.bluez"
+#define LDB_METHOD_CALL_QUERY_RECEIVERS_DEF_PATH     "/"
+#define LDB_METHOD_CALL_QUERY_RECEIVERS_DEF_IFACE    "org.freedesktop.DBus.ObjectManager"
+#define LDB_METHOD_CALL_QUERY_RECEIVERS_DEF_METHOD   "GetManagedObjects"
+
+  
 #define LDB_INITED_FLAGS_NONE                    (((uint32_t)0) << 0)
 #define LDB_INITED_FLAGS_LINKED_LISTS            (((uint32_t)1) << 0)
 #define LDB_INITED_FLAGS_CTRL_PIPE               (((uint32_t)1) << 1)
@@ -702,16 +708,25 @@ static int iDispatchDbusWatchFromEpollEvent(lrt_llist_node* px_list_node, void* 
 {
   lrt_ldb_node_watch* px_node_watch = NULL;
   struct epoll_event* px_epoll_event = NULL;
+  libruuvitag_context_type* px_full_ctx = NULL;
 
   px_node_watch = (lrt_ldb_node_watch*)px_list_node;
   px_epoll_event = (struct epoll_event*)pv_epoll_event_data;
-
+  
   if (px_node_watch->i_watch_fd == px_epoll_event->data.fd)
   {
     if ((px_epoll_event->events & EPOLLIN) & (px_node_watch->u32_epoll_event_flags))
     {
       printf("HANDLING READ\n");
       dbus_watch_handle(px_node_watch->px_dbus_read_watch, DBUS_WATCH_READABLE);
+      px_full_ctx = dbus_watch_get_data(px_node_watch->px_dbus_read_watch);
+
+      while (dbus_connection_get_dispatch_status(px_full_ctx->x_ldb.px_dbus_conn) ==
+             DBUS_DISPATCH_DATA_REMAINS)
+      {
+        printf("Calling dispatch\n");
+        dbus_connection_dispatch(px_full_ctx->x_ldb.px_dbus_conn);
+      }
     }
     if ((px_epoll_event->events & EPOLLOUT) & (px_node_watch->u32_epoll_event_flags))
     {
@@ -724,6 +739,40 @@ static int iDispatchDbusWatchFromEpollEvent(lrt_llist_node* px_list_node, void* 
 }
 
 
+static void vSendReceiverInterfacesQuery(libruuvitag_context_type* px_full_ctx)
+{
+  DBusMessage* px_dbus_msg = NULL;
+  DBusPendingCall* px_dbus_pend_call = NULL;
+
+  px_dbus_msg =
+    dbus_message_new_method_call(LDB_METHOD_CALL_QUERY_RECEIVERS_DEF_DEST,
+                                 LDB_METHOD_CALL_QUERY_RECEIVERS_DEF_PATH,
+                                 LDB_METHOD_CALL_QUERY_RECEIVERS_DEF_IFACE,
+                                 LDB_METHOD_CALL_QUERY_RECEIVERS_DEF_METHOD);
+
+  if (!px_dbus_msg)
+  {
+    printf("Call creation failed\n");
+    
+    return;
+  }
+
+  printf("Sending with reply\n");
+  if (dbus_connection_send_with_reply(px_full_ctx->x_ldb.px_dbus_conn,
+                                      px_dbus_msg,
+                                      &px_dbus_pend_call,
+                                      1000) == TRUE)
+  {
+    printf("Succeeded sending\n");
+  }
+  else
+  {
+    printf("Failed sending\n");
+
+    return;
+  }
+  
+}
 
 
 
@@ -766,6 +815,7 @@ static uint8_t u8EpollWaitAndDispatch(libruuvitag_context_type* px_full_ctx)
         else if (u8_main_op == LDB_CONTROL_MAIN_OP_RECEIVERS)
         {
           printf("Scanning for receivers\n");
+          vSendReceiverInterfacesQuery(px_full_ctx);
         }
         else if (u8_main_op == LDB_CONTROL_MAIN_OP_WATCH)
         {
@@ -872,7 +922,7 @@ static void* vLdbEventLoopBody(void* pv_arg_data)
   
   while (u8_evl_running == LDB_SUCCESS)
   {
-    //sleep(1); // just in case for now
+    sleep(1); // just in case for now
 
     if (u8EpollWaitAndDispatch(px_full_ctx) == LDB_FAIL)
     {
