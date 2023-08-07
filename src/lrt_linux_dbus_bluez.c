@@ -166,6 +166,55 @@ static int iCompareNodeAndDbusWatchFds(lrt_llist_node* px_list_node, void* pv_db
 }
 
 
+
+
+
+
+
+
+
+
+static void vCtlNodeWatchDetails(lrt_ldb_node_watch* px_node_watch_subject,
+                                 DBusWatch* px_dbus_watch_subject,
+                                 uint8_t u8_store_watch)
+{
+  if (dbus_watch_get_flags(px_dbus_watch_subject) & DBUS_WATCH_READABLE)
+  {
+    if (u8_store_watch == LDB_TRUE)
+    {
+      px_node_watch_subject->px_dbus_read_watch = px_dbus_watch_subject;
+    }
+
+    if (dbus_watch_get_enabled(px_dbus_watch_subject) == TRUE)
+    {
+      px_node_watch_subject->u32_epoll_event_flags |= EPOLLIN;
+    }
+    else
+    {
+      px_node_watch_subject->u32_epoll_event_flags &= ~EPOLLIN;
+    }
+  }
+  if (dbus_watch_get_flags(px_dbus_watch_subject) & DBUS_WATCH_WRITABLE)
+  {
+    if (u8_store_watch == LDB_TRUE)
+    {
+      px_node_watch_subject->px_dbus_write_watch = px_dbus_watch_subject;
+    }
+    
+    if (dbus_watch_get_enabled(px_dbus_watch_subject) == TRUE)
+    {
+      px_node_watch_subject->u32_epoll_event_flags |= EPOLLOUT;
+    }
+    else
+    {
+      px_node_watch_subject->u32_epoll_event_flags &= ~EPOLLOUT;
+    }
+  }
+}
+
+
+
+
 static dbus_bool_t tLdbAddWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
 {
   libruuvitag_context_type* px_full_ctx = NULL;
@@ -218,37 +267,11 @@ static dbus_bool_t tLdbAddWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
   // (we could do this also manually and actually previously did, but this
   // is just more convenient).
   dbus_watch_set_data(px_dbus_watch, px_full_ctx, NULL);
-  
-  if (dbus_watch_get_flags(px_dbus_watch) & DBUS_WATCH_READABLE)
-  {
-    px_node_watch_this->px_dbus_read_watch = px_dbus_watch;
 
-    if (dbus_watch_get_enabled(px_dbus_watch) == TRUE)
-    {
-      printf("Adding enabled readable watch\n");
-      px_node_watch_this->u32_epoll_event_flags |= EPOLLIN;
-    }
-    else
-    {
-      printf("Adding disabled readable watch\n");
-      px_node_watch_this->u32_epoll_event_flags &= ~EPOLLIN;
-    }
-  }
-  if (dbus_watch_get_flags(px_dbus_watch) & DBUS_WATCH_WRITABLE)
-  {
-    px_node_watch_this->px_dbus_write_watch = px_dbus_watch;
-    
-    if (dbus_watch_get_enabled(px_dbus_watch) == TRUE)
-    {
-      printf("Adding enabled writable watch\n");
-      px_node_watch_this->u32_epoll_event_flags |= EPOLLOUT;
-    }
-    else
-    {
-      printf("Adding disabled writable watch\n");
-      px_node_watch_this->u32_epoll_event_flags &= ~EPOLLOUT;
-    }
-  }
+  vCtlNodeWatchDetails(px_node_watch_this,
+                       px_dbus_watch,
+                       LDB_TRUE);
+                       
   if (i_epoll_op != LDB_EPOLL_OP_INVALID)
   {
     vLdbWriteControl(px_full_ctx,
@@ -344,34 +367,14 @@ static void vLdbToggleWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
 
   if (px_node_watch_this != NULL)
   {
-    if (dbus_watch_get_flags(px_dbus_watch) & DBUS_WATCH_READABLE)
-    {
-      if (dbus_watch_get_enabled(px_dbus_watch) == TRUE)
-      {
-        px_node_watch_this->u32_epoll_event_flags |= EPOLLIN;
-      }
-      else
-      {
-        px_node_watch_this->u32_epoll_event_flags &= ~EPOLLIN;
-      }
-    }
-    else if (dbus_watch_get_flags(px_dbus_watch) & DBUS_WATCH_WRITABLE)
-    {
-      if (dbus_watch_get_enabled(px_dbus_watch) == TRUE)
-      {
-        px_node_watch_this->u32_epoll_event_flags |= EPOLLOUT;
-      }
-      else
-      {
-        px_node_watch_this->u32_epoll_event_flags &= ~EPOLLOUT;
-      }
-    }
+    vCtlNodeWatchDetails(px_node_watch_this,
+                         px_dbus_watch,
+                         LDB_FALSE);
     vLdbWriteControl(px_full_ctx,
                      LDB_CONTROL_MAIN_OP_WATCH,
                      EPOLL_CTL_MOD,
                      px_node_watch_this->u32_epoll_event_flags,
                      px_node_watch_this->i_watch_fd);
-
   }
 
   return;
