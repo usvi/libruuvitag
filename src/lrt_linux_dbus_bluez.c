@@ -311,6 +311,7 @@ static void vLdbRemoveWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
     // Just need to figure out which to remove and if we need to remove the container also
     if (px_node_watch_this->px_dbus_read_watch == px_dbus_watch)
     {
+      printf("Removed read\n");
       px_node_watch_this->px_dbus_read_watch = NULL;
       i_epoll_op = EPOLL_CTL_MOD; // Override later if removing the container
       px_node_watch_this->u32_epoll_event_flags &= ~EPOLLIN;        
@@ -318,11 +319,13 @@ static void vLdbRemoveWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
     }
     else if (px_node_watch_this->px_dbus_write_watch == px_dbus_watch)
     {
+      printf("Removed write\n");
       px_node_watch_this->px_dbus_write_watch = NULL;
       i_epoll_op = EPOLL_CTL_MOD; // Override later if removing the container
       px_node_watch_this->u32_epoll_event_flags &= ~EPOLLOUT;
       u32_epoll_event_flags = px_node_watch_this->u32_epoll_event_flags;
     }
+    printf("Match native done\n");
     // Remove completely if both are null now
     if ((px_node_watch_this->px_dbus_read_watch == NULL) &&
 	  (px_node_watch_this->px_dbus_write_watch == NULL))
