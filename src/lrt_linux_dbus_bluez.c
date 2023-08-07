@@ -469,7 +469,6 @@ static void vLdbRemoveTimeout(DBusTimeout* px_dbus_timeout, void* pv_arg_data)
                      LDB_EPOLL_EVENT_FLAGS_NONE,
                      LDB_FD_INVALID);
   }
-  printf("Timeout remove call finished\n");
 }
 
 
@@ -721,19 +720,14 @@ static int iDispatchDbusWatchFromEpollEvent(lrt_llist_node* px_list_node, void* 
     {
       printf("HANDLING READ\n");
       dbus_watch_handle(px_node_watch->px_dbus_read_watch, DBUS_WATCH_READABLE);
-      printf("HANDLING READ 2\n");
       px_full_ctx = dbus_watch_get_data(px_node_watch->px_dbus_read_watch);
-      printf("HANDLING READ 3, %p\n", px_full_ctx);
 
       while (dbus_connection_get_dispatch_status(px_full_ctx->x_ldb.px_dbus_conn) ==
              DBUS_DISPATCH_DATA_REMAINS)
       {
         printf("Calling dispatch\n");
-        printf("HANDLING READ 4\n");
         dbus_connection_dispatch(px_full_ctx->x_ldb.px_dbus_conn);
-        printf("HANDLING READ 5\n");
       }
-      printf("HANDLING READ 6\n");
     }
     if ((px_epoll_event->events & EPOLLOUT) & (px_node_watch->u32_epoll_event_flags))
     {
@@ -741,8 +735,6 @@ static int iDispatchDbusWatchFromEpollEvent(lrt_llist_node* px_list_node, void* 
       dbus_watch_handle(px_node_watch->px_dbus_write_watch, DBUS_WATCH_WRITABLE);
     }
   }
-  
-  printf("HANDLING READ 7\n");
   return LDB_SUCCESS;
 }
 
