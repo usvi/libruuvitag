@@ -207,10 +207,6 @@ static dbus_bool_t tLdbAddWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
     px_node_watch_new->px_dbus_write_watch = NULL;
     vLrtLlistAddNode(px_full_ctx->x_ldb.px_llist_watches,
                      px_node_watch_new);
-    // Set main context as retrievable data in case we need it in handling
-    // (we could do this also manually and actually previously did, but this
-    // is just more convenient).
-    dbus_watch_set_data(px_dbus_watch, px_full_ctx, NULL);
     // Set iterator to same as the case where the placeholder is existing
     px_node_watch_this = px_node_watch_new;
   }
@@ -218,6 +214,11 @@ static dbus_bool_t tLdbAddWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
   { 
     i_epoll_op = EPOLL_CTL_MOD;
   }
+  // Set main context as retrievable data in case we need it in handling
+  // (we could do this also manually and actually previously did, but this
+  // is just more convenient).
+  dbus_watch_set_data(px_dbus_watch, px_full_ctx, NULL);
+  
   if (dbus_watch_get_flags(px_dbus_watch) & DBUS_WATCH_READABLE)
   {
     px_node_watch_this->px_dbus_read_watch = px_dbus_watch;
@@ -468,6 +469,7 @@ static void vLdbRemoveTimeout(DBusTimeout* px_dbus_timeout, void* pv_arg_data)
                      LDB_EPOLL_EVENT_FLAGS_NONE,
                      LDB_FD_INVALID);
   }
+  printf("Timeout remove call finished\n");
 }
 
 
@@ -719,14 +721,19 @@ static int iDispatchDbusWatchFromEpollEvent(lrt_llist_node* px_list_node, void* 
     {
       printf("HANDLING READ\n");
       dbus_watch_handle(px_node_watch->px_dbus_read_watch, DBUS_WATCH_READABLE);
+      printf("HANDLING READ 2\n");
       px_full_ctx = dbus_watch_get_data(px_node_watch->px_dbus_read_watch);
+      printf("HANDLING READ 3, %p\n", px_full_ctx);
 
       while (dbus_connection_get_dispatch_status(px_full_ctx->x_ldb.px_dbus_conn) ==
              DBUS_DISPATCH_DATA_REMAINS)
       {
         printf("Calling dispatch\n");
+        printf("HANDLING READ 4\n");
         dbus_connection_dispatch(px_full_ctx->x_ldb.px_dbus_conn);
+        printf("HANDLING READ 5\n");
       }
+      printf("HANDLING READ 6\n");
     }
     if ((px_epoll_event->events & EPOLLOUT) & (px_node_watch->u32_epoll_event_flags))
     {
@@ -735,6 +742,7 @@ static int iDispatchDbusWatchFromEpollEvent(lrt_llist_node* px_list_node, void* 
     }
   }
   
+  printf("HANDLING READ 7\n");
   return LDB_SUCCESS;
 }
 
@@ -796,7 +804,7 @@ static uint8_t u8EpollWaitAndDispatch(libruuvitag_context_type* px_full_ctx)
   i_epoll_fds_ready = epoll_wait(px_full_ctx->x_ldb.i_epoll_fd, ax_epoll_monitor_events,
                                  LDB_EPOLL_MONITOR_NUM_EVENTS, i_next_timeout);
 
-
+  printf("%d fds ready in epoll\n", i_epoll_fds_ready);
 
   for (i_epoll_iterator = 0; i_epoll_iterator < i_epoll_fds_ready; i_epoll_iterator++)
   {
