@@ -25,63 +25,64 @@ lrt_llist_head* pxLrtLlistNew(void)
 }
 
 
-lrt_llist_node* pxLrtLlistFindNode(lrt_llist_head* px_list,
-                                   int i_node_op,
-                                   int (*iCompareNodes)(lrt_llist_node*, void*),
-                                   void* v_search_node_data)
+lrt_llist_node* pxLrtLlistLowOrHighSearch(lrt_llist_head* px_list,
+                                          uint8_t (*u8CompareNodes)(lrt_llist_node*, lrt_llist_node*))
 {
   lrt_llist_node* px_node_iterator = NULL;
   lrt_llist_node* px_node_found = NULL;
 
-  if (i_node_op == LRT_LLIST_FIND_EQUAL)
+  px_node_iterator = px_list->px_first_node;
+  
+  // Find first valid node as base
+  while (px_node_iterator != NULL)
   {
-    px_node_iterator = px_list->px_first_node;
-    
-    while (px_node_iterator != NULL)
+    if (u8CompareNodes(px_node_iterator, px_node_iterator) == LRT_LLIST_COMPARE_EQUAL)
     {
-      if (iCompareNodes(px_node_iterator, v_search_node_data) == 0)
-      {
-        return px_node_iterator;
-      }
-      px_node_iterator = px_node_iterator->px_next_node;
-    }
+      px_node_found = px_node_iterator;
 
+      break;
+    }
+    px_node_iterator = px_node_iterator->px_next_node;
+  }
+
+  if (px_node_found == NULL)
+  {
     return NULL;
   }
-  else if (i_node_op == LRT_LLIST_FIND_LOWEST)
+  // Actual search begin
+  px_node_iterator = px_node_found->px_next_node;
+  
+  while (px_node_iterator != NULL)
   {
-    px_node_iterator = px_list->px_first_node;
-    px_node_found = px_node_iterator;
-
-    while (px_node_iterator != NULL)
+    if (u8CompareNodes(px_node_found, px_node_iterator) == LRT_LLIST_COMPARE_RIGHT_WINS)
     {
-      if (iCompareNodes(px_node_iterator, px_node_found) < 0)
-      {
-        px_node_found = px_node_iterator;
-      }
-      px_node_iterator = px_node_iterator->px_next_node;
+      px_node_found = px_node_iterator;
     }
-
-    return px_node_found;
+    px_node_iterator = px_node_iterator->px_next_node;
   }
-  else if (i_node_op == LRT_LLIST_FIND_HIGHEST)
+  
+  return px_node_found;
+}
+
+
+lrt_llist_node* pxLrtLlistEqualParamSearch(lrt_llist_head* px_list,
+                                           uint8_t (*u8CompareNodes)(lrt_llist_node*, void*),
+                                           void* v_search_node_data)
+{
+  lrt_llist_node* px_node_iterator = NULL;
+
+  px_node_iterator = px_list->px_first_node;
+    
+  while (px_node_iterator != NULL)
   {
-    px_node_iterator = px_list->px_first_node;
-    px_node_found = px_node_iterator;
-
-    while (px_node_iterator != NULL)
+    if (u8CompareNodes(px_node_iterator, v_search_node_data) == LRT_LLIST_COMPARE_EQUAL)
     {
-      if (iCompareNodes(px_node_iterator, px_node_found) > 0)
-      {
-        px_node_found = px_node_iterator;
-      }
-      px_node_iterator = px_node_iterator->px_next_node;
+      return px_node_iterator;
     }
-
-    return px_node_found;
+    px_node_iterator = px_node_iterator->px_next_node;
   }
 
-  // Falltrough, should not really happen
+  // Falltrough
   return NULL;
 }
 

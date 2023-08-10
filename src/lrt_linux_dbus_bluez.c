@@ -31,10 +31,6 @@
 
 #define LDB_CONTROL_NO_OP                  (0)
 
-#define LDB_COMPARE_NEGATIVE               (-1)
-#define LDB_COMPARE_NEUTRAL                (0)
-#define LDB_COMPARE_POSITIVE               (1)
-
 #define LDB_SIGNAL_DEF_INTERFACES_ADDED \
   "type='signal',"\
   "interface='org.freedesktop.DBus.ObjectManager',"\
@@ -154,15 +150,16 @@ static uint8_t u8LdbReadControl(libruuvitag_context_type* px_full_ctx,
 }
 
 
-static int iCompareNodeAndDbusWatchFds(lrt_llist_node* px_list_node, void* pv_dbus_watch_data)
+static uint8_t u8CompareNodeAndDbusWatchFds(lrt_llist_node* px_list_node,
+                                            void* pv_dbus_watch_data)
 {
   if (((lrt_ldb_node_watch*)px_list_node)->i_watch_fd ==
       dbus_watch_get_unix_fd((DBusWatch*)pv_dbus_watch_data))
   {
-    return LDB_COMPARE_NEUTRAL;
+    return LRT_LLIST_COMPARE_EQUAL;
   }
   
-  return LDB_COMPARE_NEGATIVE;
+  return LRT_LLIST_COMPARE_DONT_CARE;
 }
 
 
@@ -233,11 +230,10 @@ static dbus_bool_t tLdbAddWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
   px_full_ctx = (libruuvitag_context_type*)pv_arg_data;
 
   px_node_watch_this =
-    (lrt_ldb_node_watch*)pxLrtLlistFindNode(px_full_ctx->x_ldb.px_llist_watches,
-                                            LRT_LLIST_FIND_EQUAL,
-                                            iCompareNodeAndDbusWatchFds,
-                                            px_dbus_watch);
-    
+    (lrt_ldb_node_watch*)pxLrtLlistEqualParamSearch(px_full_ctx->x_ldb.px_llist_watches,
+                                                    u8CompareNodeAndDbusWatchFds,
+                                                    px_dbus_watch);
+
   if (px_node_watch_this == NULL)
   {
     printf("Allocating new watch container\n");
@@ -260,7 +256,7 @@ static dbus_bool_t tLdbAddWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
     px_node_watch_this = px_node_watch_new;
   }
   else
-  { 
+  {
     i_epoll_op = EPOLL_CTL_MOD;
   }
   // Set main context as retrievable data in case we need it in handling
@@ -271,7 +267,7 @@ static dbus_bool_t tLdbAddWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
   vCtlNodeWatchDetails(px_node_watch_this,
                        px_dbus_watch,
                        LDB_TRUE);
-                       
+  
   if (i_epoll_op != LDB_EPOLL_OP_INVALID)
   {
     vLdbWriteControl(px_full_ctx,
@@ -300,10 +296,9 @@ static void vLdbRemoveWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
   printf("Watch remove called\n");
   px_full_ctx = (libruuvitag_context_type*)pv_arg_data;
   px_node_watch_this =
-    (lrt_ldb_node_watch*)pxLrtLlistFindNode(px_full_ctx->x_ldb.px_llist_watches,
-                                            LRT_LLIST_FIND_EQUAL,
-                                            iCompareNodeAndDbusWatchFds,
-                                            px_dbus_watch);
+    (lrt_ldb_node_watch*)pxLrtLlistEqualParamSearch(px_full_ctx->x_ldb.px_llist_watches,
+                                                    u8CompareNodeAndDbusWatchFds,
+                                                    px_dbus_watch);
 
   if (px_node_watch_this != NULL)
   {
@@ -363,10 +358,9 @@ static void vLdbToggleWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
   printf("Watch toggle called\n");
   px_full_ctx = (libruuvitag_context_type*)pv_arg_data;
   px_node_watch_this =
-    (lrt_ldb_node_watch*)pxLrtLlistFindNode(px_full_ctx->x_ldb.px_llist_watches,
-                                            LRT_LLIST_FIND_EQUAL,
-                                            iCompareNodeAndDbusWatchFds,
-                                            px_dbus_watch);
+    (lrt_ldb_node_watch*)pxLrtLlistEqualParamSearch(px_full_ctx->x_ldb.px_llist_watches,
+                                                    u8CompareNodeAndDbusWatchFds,
+                                                    px_dbus_watch);
 
   if (px_node_watch_this != NULL)
   {
@@ -384,15 +378,15 @@ static void vLdbToggleWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
 }
 
 
-static int iCompareNodeAndDbusTimeout(lrt_llist_node* px_list_node, void* pv_dbus_timeout_data)
+static uint8_t u8CompareNodeAndDbusTimeout(lrt_llist_node* px_list_node, void* pv_dbus_timeout_data)
 {
   if (((DBusWatch*)(((lrt_ldb_node_timeout*)px_list_node)->px_dbus_timeout)) ==
       ((DBusWatch*)pv_dbus_timeout_data))
   {
-    return LDB_COMPARE_NEUTRAL;
+    return LRT_LLIST_COMPARE_EQUAL;
   }
   
-  return LDB_COMPARE_NEGATIVE;
+  return LRT_LLIST_COMPARE_DONT_CARE;
 }
 
 
@@ -406,10 +400,9 @@ static dbus_bool_t tLdbAddTimeout(DBusTimeout* px_dbus_timeout, void* pv_arg_dat
   printf("Timeout add called\n");
   px_full_ctx = (libruuvitag_context_type*)pv_arg_data;
   px_node_timeout_this =
-    (lrt_ldb_node_timeout*)pxLrtLlistFindNode(px_full_ctx->x_ldb.px_llist_timeouts,
-                                              LRT_LLIST_FIND_EQUAL,
-                                              iCompareNodeAndDbusTimeout,
-                                              px_dbus_timeout);
+    (lrt_ldb_node_timeout*)pxLrtLlistEqualParamSearch(px_full_ctx->x_ldb.px_llist_timeouts,
+                                                      u8CompareNodeAndDbusTimeout,
+                                                      px_dbus_timeout);
   
   if (px_node_timeout_this == NULL)
   {
@@ -460,10 +453,9 @@ static void vLdbRemoveTimeout(DBusTimeout* px_dbus_timeout, void* pv_arg_data)
   printf("Timeout remove called\n");
   px_full_ctx = (libruuvitag_context_type*)pv_arg_data;
   px_node_timeout_this =
-    (lrt_ldb_node_timeout*)pxLrtLlistFindNode(px_full_ctx->x_ldb.px_llist_timeouts,
-                                              LRT_LLIST_FIND_EQUAL,
-                                              iCompareNodeAndDbusTimeout,
-                                              px_dbus_timeout);
+    (lrt_ldb_node_timeout*)pxLrtLlistEqualParamSearch(px_full_ctx->x_ldb.px_llist_timeouts,
+                                                      u8CompareNodeAndDbusTimeout,
+                                                      px_dbus_timeout);
   
   if (px_node_timeout_this != NULL)
   {
@@ -487,10 +479,9 @@ static void vLdbToggleTimeout(DBusTimeout* px_dbus_timeout, void* pv_arg_data)
   printf("Timeout toggle called\n");
   px_full_ctx = (libruuvitag_context_type*)pv_arg_data;
   px_node_timeout_this =
-    (lrt_ldb_node_timeout*)pxLrtLlistFindNode(px_full_ctx->x_ldb.px_llist_timeouts,
-                                              LRT_LLIST_FIND_EQUAL,
-                                              iCompareNodeAndDbusTimeout,
-                                              px_dbus_timeout);
+    (lrt_ldb_node_timeout*)pxLrtLlistEqualParamSearch(px_full_ctx->x_ldb.px_llist_timeouts,
+                                                      u8CompareNodeAndDbusTimeout,
+                                                      px_dbus_timeout);
 
   if (px_node_timeout_this != NULL)
   {
@@ -781,13 +772,50 @@ static void vSendReceiverInterfacesQuery(libruuvitag_context_type* px_full_ctx)
 }
 
 
+static uint8_t u8CompareForSmallestTimeouts(lrt_llist_node* px_list_node_a,
+                                            lrt_llist_node* px_list_node_b)
+{
+  lrt_ldb_node_timeout* px_timeout_node_a = NULL;
+  lrt_ldb_node_timeout* px_timeout_node_b = NULL;
+  
+  if ((px_list_node_a == NULL) || (px_list_node_b == NULL))
+  {
+    return LRT_LLIST_COMPARE_INVALID;
+  }
+  px_timeout_node_a = (lrt_ldb_node_timeout*)px_list_node_a;
+  px_timeout_node_b = (lrt_ldb_node_timeout*)px_list_node_b;
+
+  // Self validation 
+  if (px_timeout_node_a == px_timeout_node_b)
+  {
+    if ((px_timeout_node_a->u8_enabled == LDB_TRUE) &&
+        (px_timeout_node_a->i_timeout_left >= 0))
+    {
+      return LRT_LLIST_COMPARE_EQUAL;
+    }
+  }
+  // All other calls should have left side enabled and ok,
+  // test only right
+  if ((px_timeout_node_b->u8_enabled == LDB_FALSE) ||
+      (px_timeout_node_b->i_timeout_left < 0))
+  {
+    return LRT_LLIST_COMPARE_LEFT_WINS;
+  }
+  if (px_timeout_node_a->i_timeout_left <= px_timeout_node_b->i_timeout_left)
+  {
+    return LRT_LLIST_COMPARE_LEFT_WINS;
+  }
+  // Else
+  return LRT_LLIST_COMPARE_RIGHT_WINS;
+}
+                            
 
 static uint8_t u8EpollWaitAndDispatch(libruuvitag_context_type* px_full_ctx)
 {
   static struct epoll_event ax_epoll_monitor_events[LDB_EPOLL_MONITOR_NUM_EVENTS];
   struct epoll_event x_epoll_temp_event;
+  lrt_ldb_node_timeout* px_node_timeout_next = NULL;
   struct timespec x_wait_start;
-  struct timespec x_wait_end;
   int i_epoll_fds_ready = 0;
   int i_next_timeout = LDB_TIMEOUT_INVALID;
   int i_epoll_iterator = 0;
@@ -797,8 +825,19 @@ static uint8_t u8EpollWaitAndDispatch(libruuvitag_context_type* px_full_ctx)
   uint32_t u32_epoll_event_flags = LDB_EPOLL_EVENT_FLAGS_NONE;
   int i_control_passed_fd = LDB_FD_INVALID;
 
+  px_node_timeout_next = 
+    (lrt_ldb_node_timeout*)pxLrtLlistLowOrHighSearch(px_full_ctx->x_ldb.px_llist_timeouts,
+                                                     u8CompareForSmallestTimeouts);
+
+  if (px_node_timeout_next != NULL)
+  {
+    i_next_timeout = px_node_timeout_next->i_timeout_left;
+    printf("Found defined timeout %d\n", i_next_timeout);
+  }
+
   
-  //clock_gettime(CLOCK_MONOTONIC, 
+  //clock_gettime(CLOCK_MONOTONIC,
+  printf("Epoll entering wait\n");
   i_epoll_fds_ready = epoll_wait(px_full_ctx->x_ldb.i_epoll_fd, ax_epoll_monitor_events,
                                  LDB_EPOLL_MONITOR_NUM_EVENTS, i_next_timeout);
 
@@ -833,20 +872,24 @@ static uint8_t u8EpollWaitAndDispatch(libruuvitag_context_type* px_full_ctx)
           x_epoll_temp_event.data.ptr = NULL;
           x_epoll_temp_event.data.fd = i_control_passed_fd;
 
+          printf("Epoll modifying fds\n");
+
           if (epoll_ctl(px_full_ctx->x_ldb.i_epoll_fd, i_epoll_op,
                         x_epoll_temp_event.data.fd, &x_epoll_temp_event) == LDB_EPOLL_OP_INVALID)
           {
             return LDB_FAIL;
           }
+          printf("Epoll modified fds\n");
         }
         else if (u8_main_op == LDB_CONTROL_MAIN_OP_TIMEOUT)
         {
-          // Handled more or lessa utomatically
+          // Handled more or less automatically
         }
       }
     }
     else
     {
+      printf("Doing list apply for watches\n");
       vLrtLlistApplyFunc(px_full_ctx->x_ldb.px_llist_watches,
                          iDispatchDbusWatchFromEpollEvent,
                          &(ax_epoll_monitor_events[i_epoll_iterator]));
@@ -928,7 +971,7 @@ static void* vLdbEventLoopBody(void* pv_arg_data)
   
   while (u8_evl_running == LDB_SUCCESS)
   {
-    sleep(1); // just in case for now
+    //sleep(1); // just in case for now
 
     if (u8EpollWaitAndDispatch(px_full_ctx) == LDB_FAIL)
     {
