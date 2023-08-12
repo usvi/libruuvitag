@@ -225,8 +225,6 @@ static dbus_bool_t tLdbAddWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
   void* pv_malloc_test = NULL;
   int i_epoll_op = LDB_EPOLL_OP_INVALID;
 
-  printf("Watch add called\n");
-
   // Add all kinds of watches, also disabled. If DBus instructs us
   // to add them disabled, there is a reason for it.
 
@@ -240,7 +238,6 @@ static dbus_bool_t tLdbAddWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
 
   if (px_node_watch_this == NULL)
   {
-    printf("Allocating new watch container\n");
     i_epoll_op = EPOLL_CTL_ADD;
     // Add new placeholder
     pv_malloc_test = malloc(sizeof(lrt_ldb_node_watch));
@@ -297,7 +294,6 @@ static void vLdbRemoveWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
   int i_epoll_op = LDB_EPOLL_OP_INVALID;
   uint32_t u32_epoll_event_flags = LDB_EPOLL_EVENT_FLAGS_NONE;
 
-  printf("Watch remove called\n");
   px_full_ctx = (libruuvitag_context_type*)pv_arg_data;
   px_node_watch_this =
     (lrt_ldb_node_watch*)pxLrtLlistEqualParamSearch(px_full_ctx->x_ldb.px_llist_watches,
@@ -306,11 +302,9 @@ static void vLdbRemoveWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
 
   if (px_node_watch_this != NULL)
   {
-    printf("Match in native remove\n");
     // Just need to figure out which to remove and if we need to remove the container also
     if (px_node_watch_this->px_dbus_read_watch == px_dbus_watch)
     {
-      printf("Removed read\n");
       px_node_watch_this->px_dbus_read_watch = NULL;
       i_epoll_op = EPOLL_CTL_MOD; // Override later if removing the container
       px_node_watch_this->u32_epoll_event_flags &= ~EPOLLIN;        
@@ -318,19 +312,16 @@ static void vLdbRemoveWatch(DBusWatch* px_dbus_watch, void* pv_arg_data)
     }
     else if (px_node_watch_this->px_dbus_write_watch == px_dbus_watch)
     {
-      printf("Removed write\n");
       px_node_watch_this->px_dbus_write_watch = NULL;
       i_epoll_op = EPOLL_CTL_MOD; // Override later if removing the container
       px_node_watch_this->u32_epoll_event_flags &= ~EPOLLOUT;
       u32_epoll_event_flags = px_node_watch_this->u32_epoll_event_flags;
     }
-    printf("Match native done\n");
     // Remove completely if both are null now
     if ((px_node_watch_this->px_dbus_read_watch == NULL) &&
 	  (px_node_watch_this->px_dbus_write_watch == NULL))
     {
       // Final event removed, removing container
-      printf("Removing watch container\n");
       i_epoll_op = EPOLL_CTL_DEL; // Overridden
 
       vLrtLlistFreeNode(px_full_ctx->x_ldb.px_llist_watches,
@@ -401,7 +392,6 @@ static dbus_bool_t tLdbAddTimeout(DBusTimeout* px_dbus_timeout, void* pv_arg_dat
   lrt_ldb_node_timeout* px_node_timeout_new = NULL;
   void* pv_malloc_test = NULL;
 
-  printf("Timeout add called\n");
   px_full_ctx = (libruuvitag_context_type*)pv_arg_data;
   px_node_timeout_this =
     (lrt_ldb_node_timeout*)pxLrtLlistEqualParamSearch(px_full_ctx->x_ldb.px_llist_timeouts,
@@ -454,7 +444,6 @@ static void vLdbRemoveTimeout(DBusTimeout* px_dbus_timeout, void* pv_arg_data)
   libruuvitag_context_type* px_full_ctx = NULL;
   lrt_ldb_node_timeout* px_node_timeout_this = NULL;
 
-  printf("Timeout remove called\n");
   px_full_ctx = (libruuvitag_context_type*)pv_arg_data;
   px_node_timeout_this =
     (lrt_ldb_node_timeout*)pxLrtLlistEqualParamSearch(px_full_ctx->x_ldb.px_llist_timeouts,
@@ -767,21 +756,18 @@ static uint8_t u8DispatchDbusWatchFromEpollEvent(lrt_llist_node* px_list_node, v
   {
     if ((px_epoll_event->events & EPOLLIN) & (px_node_watch->u32_epoll_event_flags))
     {
-      printf("HANDLING READ\n");
       dbus_watch_handle(px_node_watch->px_dbus_read_watch, DBUS_WATCH_READABLE);
       px_full_ctx = dbus_watch_get_data(px_node_watch->px_dbus_read_watch);
 
       while (dbus_connection_get_dispatch_status(px_full_ctx->x_ldb.px_dbus_conn) ==
              DBUS_DISPATCH_DATA_REMAINS)
       {
-        printf("Calling dispatch\n");
         vDispatchReadDbusCore(px_full_ctx);
-        // dbus_connection_dispatch(px_full_ctx->x_ldb.px_dbus_conn);
       }
     }
     if ((px_epoll_event->events & EPOLLOUT) & (px_node_watch->u32_epoll_event_flags))
     {
-      printf("Handling WRITE\n");
+      // Does this ever get called?
       dbus_watch_handle(px_node_watch->px_dbus_write_watch, DBUS_WATCH_WRITABLE);
     }
   }
@@ -804,19 +790,13 @@ static void vSendReceiverInterfacesQuery(libruuvitag_context_type* px_full_ctx)
 
   if (!px_dbus_msg)
   {
-    printf("Call creation failed\n");
-    
     return;
   }
-  printf("Sending with reply\n");
-  
   if (dbus_connection_send_with_reply(px_full_ctx->x_ldb.px_dbus_conn,
                                       px_dbus_msg,
                                       &px_dbus_pend_call,
                                       1000) == TRUE)
   {
-    printf("Succeeded sending\n");
-
     pv_malloc_test = malloc(sizeof(lrt_ldb_node_watch));
 
     if (pv_malloc_test == NULL)
@@ -943,12 +923,9 @@ static uint8_t u8EpollWaitAndDispatch(libruuvitag_context_type* px_full_ctx)
     i_next_timeout = px_node_timeout_next->i_timeout_left;
   }
   
-  printf("Epoll entering wait\n");
   clock_gettime(CLOCK_MONOTONIC, &x_wait_start);
   i_epoll_fds_ready = epoll_wait(px_full_ctx->x_ldb.i_epoll_fd, ax_epoll_monitor_events,
                                  LDB_EPOLL_MONITOR_NUM_EVENTS, i_next_timeout);
-  
-  printf("%d fds ready in epoll\n", i_epoll_fds_ready);
 
   if (i_epoll_fds_ready == 0)
   {
@@ -966,13 +943,10 @@ static uint8_t u8EpollWaitAndDispatch(libruuvitag_context_type* px_full_ctx)
       {
         if (u8_main_op == LDB_CONTROL_MAIN_OP_TERMINATE)
         {
-          printf("Terminating as requested\n");
-
           return LDB_FAIL;
         }
         else if (u8_main_op == LDB_CONTROL_MAIN_OP_RECEIVERS)
         {
-          printf("Scanning for receivers\n");
           vSendReceiverInterfacesQuery(px_full_ctx);
         }
         else if (u8_main_op == LDB_CONTROL_MAIN_OP_WATCH)
@@ -985,14 +959,11 @@ static uint8_t u8EpollWaitAndDispatch(libruuvitag_context_type* px_full_ctx)
           x_epoll_temp_event.data.ptr = NULL;
           x_epoll_temp_event.data.fd = i_control_passed_fd;
 
-          printf("Epoll modifying fds\n");
-
           if (epoll_ctl(px_full_ctx->x_ldb.i_epoll_fd, i_epoll_op,
                         x_epoll_temp_event.data.fd, &x_epoll_temp_event) == LDB_EPOLL_OP_INVALID)
           {
             return LDB_FAIL;
           }
-          printf("Epoll modified fds\n");
         }
         else if (u8_main_op == LDB_CONTROL_MAIN_OP_TIMEOUT)
         {
@@ -1002,7 +973,6 @@ static uint8_t u8EpollWaitAndDispatch(libruuvitag_context_type* px_full_ctx)
     }
     else
     {
-      printf("Doing list apply for watches\n");
       vLrtLlistApplyFunc(px_full_ctx->x_ldb.px_llist_watches,
                          u8DispatchDbusWatchFromEpollEvent,
                          &(ax_epoll_monitor_events[i_epoll_iterator]));
@@ -1163,7 +1133,6 @@ uint8_t u8LrtDeinitLinuxDbusBluez(libruuvitag_context_type* px_full_ctx)
     // Event loop cleans up automatically after it terminates
     pthread_join(px_full_ctx->x_ldb.x_evl_thread, NULL);
   }
-  printf("Returning success\n");
   
   return LDB_SUCCESS;
 }
