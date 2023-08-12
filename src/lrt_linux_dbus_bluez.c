@@ -702,6 +702,11 @@ static uint8_t u8CompareNodeAndDbusSerial(lrt_llist_node* px_list_node,
 }
 
 
+static void vHandleGetReceiversDbusReply(DBusMessage* px_dbus_msg)
+{
+  printf("Handling receivers DBUS reply\n");
+}
+
 
 static void vDispatchReadDbusCore(libruuvitag_context_type* px_full_ctx)
 {
@@ -736,7 +741,14 @@ static void vDispatchReadDbusCore(libruuvitag_context_type* px_full_ctx)
 
     if (px_node_pending_call_this != NULL)
     {
-      printf("Matched pending call of type %u \n", px_node_pending_call_this->u8_call_type);
+      px_dbus_msg = dbus_pending_call_steal_reply(px_node_pending_call_this->px_dbus_pending_call);
+
+      if (px_node_pending_call_this->u8_call_type == LDB_METHOD_CALL_TYPE_GET_RECEIVERS)
+      {
+        vHandleGetReceiversDbusReply(px_dbus_msg);
+      } 
+      dbus_message_unref(px_dbus_msg);
+      dbus_pending_call_unref(px_node_pending_call_this->px_dbus_pending_call);
     }
   }
 
@@ -808,6 +820,7 @@ static void vSendReceiverInterfacesQuery(libruuvitag_context_type* px_full_ctx)
     px_node_pending_call_new->px_next_node = NULL;
     px_node_pending_call_new->u8_call_type = LDB_METHOD_CALL_TYPE_GET_RECEIVERS;
     px_node_pending_call_new->t_dbus_msg_serial = dbus_message_get_serial(px_dbus_msg);
+    px_node_pending_call_new->px_dbus_pending_call = px_dbus_pend_call;
     
     vLrtLlistAddNode(px_full_ctx->x_ldb.px_llist_pending_calls,
                      px_node_pending_call_new);
