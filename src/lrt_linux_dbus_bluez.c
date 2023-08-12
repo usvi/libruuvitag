@@ -51,6 +51,7 @@
 #define LDB_METHOD_CALL_QUERY_RECEIVERS_DEF_IFACE    "org.freedesktop.DBus.ObjectManager"
 #define LDB_METHOD_CALL_QUERY_RECEIVERS_DEF_METHOD   "GetManagedObjects"
 
+#define LDB_METHOD_CALL_TYPE_GET_RECEIVERS       (1)
   
 #define LDB_INITED_FLAGS_NONE                    (((uint32_t)0) << 0)
 #define LDB_INITED_FLAGS_LINKED_LISTS            (((uint32_t)1) << 0)
@@ -529,8 +530,6 @@ static void vLdbDeinitEventLoopWithDbus(libruuvitag_context_type* px_full_ctx)
     // DOes nothing, but for sanity.
     px_full_ctx->x_ldb.u32_inited_flags &= ~LDB_INITED_FLAGS_CORELOOP_RUNNING;
   }
-  // Pending calls
-
   // Timeouts
   if (px_full_ctx->x_ldb.u32_inited_flags & LDB_INITED_FLAGS_TIMEOUTS_ADDED)
   {
@@ -568,10 +567,6 @@ static void vLdbDeinitEventLoopWithDbus(libruuvitag_context_type* px_full_ctx)
     dbus_connection_flush(px_full_ctx->x_ldb.px_dbus_conn);
     px_full_ctx->x_ldb.u32_inited_flags &= ~LDB_INITED_FLAGS_IFACES_ADDED;
   }
-
-  // Pending calls to be done later
-
-  
   // The actual dbus connection
   if (px_full_ctx->x_ldb.u32_inited_flags & LDB_INITED_FLAGS_CONN)
   {
@@ -705,6 +700,60 @@ static uint8_t u8LdbInitDbus(libruuvitag_context_type* px_full_ctx)
 }
 
 
+static uint8_t u8CompareNodeAndDbusSerial(lrt_llist_node* px_list_node,
+                                          void* pv_dbus_serial_data)
+{
+  if (((lrt_ldb_node_pending_call*)(px_list_node))->t_dbus_msg_serial ==
+      (*((dbus_uint32_t*)(pv_dbus_serial_data))))
+  {
+    return LRT_LLIST_COMPARE_EQUAL;
+  }
+  
+  return LRT_LLIST_COMPARE_DONT_CARE;
+}
+
+
+
+static void vDispatchReadDbusCore(libruuvitag_context_type* px_full_ctx)
+{
+  int i_message_type = 0;
+  DBusMessage* px_dbus_msg = NULL;
+  lrt_ldb_node_pending_call* px_node_pending_call_this = NULL;
+  dbus_uint32_t t_dbus_msg_call_serial = 0;
+  //dbus_connection_dispatch(px_full_ctx->x_ldb.px_dbus_conn);
+
+  px_dbus_msg = dbus_connection_borrow_message(px_full_ctx->x_ldb.px_dbus_conn);
+
+  if (px_dbus_msg == NULL)
+  {
+    return;
+  }
+  i_message_type = dbus_message_get_type(px_dbus_msg);
+
+  if (i_message_type == DBUS_MESSAGE_TYPE_METHOD_RETURN)
+  {
+    t_dbus_msg_call_serial = dbus_message_get_reply_serial(px_dbus_msg);
+  }
+  dbus_connection_return_message(px_full_ctx->x_ldb.px_dbus_conn, px_dbus_msg);
+  // Basically just dispatch as everything is in filters
+  dbus_connection_dispatch(px_full_ctx->x_ldb.px_dbus_conn);
+
+  if (i_message_type == DBUS_MESSAGE_TYPE_METHOD_RETURN)
+  {
+    px_node_pending_call_this =
+      (lrt_ldb_node_pending_call*)pxLrtLlistEqualParamSearch(px_full_ctx->x_ldb.px_llist_pending_calls,
+                                                             u8CompareNodeAndDbusSerial,
+                                                             &t_dbus_msg_call_serial);
+
+    if (px_node_pending_call_this != NULL)
+    {
+      printf("Matched pending call of type %u \n", px_node_pending_call_this->u8_call_type);
+    }
+  }
+
+}
+
+
 static uint8_t u8DispatchDbusWatchFromEpollEvent(lrt_llist_node* px_list_node, void* pv_epoll_event_data)
 {
   lrt_ldb_node_watch* px_node_watch = NULL;
@@ -726,7 +775,8 @@ static uint8_t u8DispatchDbusWatchFromEpollEvent(lrt_llist_node* px_list_node, v
              DBUS_DISPATCH_DATA_REMAINS)
       {
         printf("Calling dispatch\n");
-        dbus_connection_dispatch(px_full_ctx->x_ldb.px_dbus_conn);
+        vDispatchReadDbusCore(px_full_ctx);
+        // dbus_connection_dispatch(px_full_ctx->x_ldb.px_dbus_conn);
       }
     }
     if ((px_epoll_event->events & EPOLLOUT) & (px_node_watch->u32_epoll_event_flags))
@@ -774,6 +824,11 @@ static void vSendReceiverInterfacesQuery(libruuvitag_context_type* px_full_ctx)
       return;
     }
     px_node_pending_call_new = (lrt_ldb_node_pending_call*)(pv_malloc_test);
+    px_node_pending_call_new->px_prev_node = NULL;
+    px_node_pending_call_new->px_next_node = NULL;
+    px_node_pending_call_new->u8_call_type = LDB_METHOD_CALL_TYPE_GET_RECEIVERS;
+    px_node_pending_call_new->t_dbus_msg_serial = dbus_message_get_serial(px_dbus_msg);
+    
     vLrtLlistAddNode(px_full_ctx->x_ldb.px_llist_pending_calls,
                      px_node_pending_call_new);
   }

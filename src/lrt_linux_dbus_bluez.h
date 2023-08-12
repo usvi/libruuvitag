@@ -46,6 +46,9 @@ struct lrt_ldb_node_pending_call
 {
   lrt_llist_node* px_prev_node;
   lrt_llist_node* px_next_node;
+
+  uint8_t u8_call_type;
+  dbus_uint32_t t_dbus_msg_serial;
   
   DBusPendingCall* px_dbus_pending_call;
 };
