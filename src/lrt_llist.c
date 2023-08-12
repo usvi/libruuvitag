@@ -88,7 +88,7 @@ lrt_llist_node* pxLrtLlistEqualParamSearch(lrt_llist_head* px_list,
 
 
 void vLrtLlistApplyFunc(lrt_llist_head* px_list,
-                        int (*iApplyFunc)(lrt_llist_node*, void*),
+                        uint8_t (*u8ApplyFunc)(lrt_llist_node*, void*),
                         void* pv_user_data)
 {
   lrt_llist_node* px_node_iterator = NULL;
@@ -97,7 +97,7 @@ void vLrtLlistApplyFunc(lrt_llist_head* px_list,
   
   while (px_node_iterator != NULL)
   {
-    iApplyFunc(px_node_iterator, pv_user_data);
+    u8ApplyFunc(px_node_iterator, pv_user_data);
     px_node_iterator = px_node_iterator->px_next_node;
   }
 }

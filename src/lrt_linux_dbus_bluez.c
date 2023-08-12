@@ -14,6 +14,9 @@
 
 #define NUM_MS_IN_S   (1000)
 #define NUM_US_IN_MS  (1000)
+#define NUM_US_IN_S   (1000000)
+#define NUM_NS_IN_S   (1000000000)
+#define NUM_NS_IN_MS  (1000000)
 
 #define LDB_SEM_INIT_FAILED                (-1)
 #define LDB_FD_INVALID                     (-1)
@@ -702,7 +705,7 @@ static uint8_t u8LdbInitDbus(libruuvitag_context_type* px_full_ctx)
 }
 
 
-static int iDispatchDbusWatchFromEpollEvent(lrt_llist_node* px_list_node, void* pv_epoll_event_data)
+static uint8_t u8DispatchDbusWatchFromEpollEvent(lrt_llist_node* px_list_node, void* pv_epoll_event_data)
 {
   lrt_ldb_node_watch* px_node_watch = NULL;
   struct epoll_event* px_epoll_event = NULL;
@@ -808,8 +811,46 @@ static uint8_t u8CompareForSmallestTimeouts(lrt_llist_node* px_list_node_a,
   // Else
   return LRT_LLIST_COMPARE_RIGHT_WINS;
 }
-                            
 
+
+static uint8_t u8CheckTimeoutForElapsed(lrt_llist_node* px_list_node, void* pv_wait_start_data)
+{
+  lrt_ldb_node_timeout* px_node_timeout_this = NULL;
+  struct timespec* px_wait_start = NULL;
+  struct timespec x_time_now;
+  int i_timeout_spent_ms;
+
+  px_node_timeout_this = (lrt_ldb_node_timeout*)px_list_node;
+  px_wait_start = (struct timespec*)pv_wait_start_data;
+
+  if (px_node_timeout_this->u8_enabled == LDB_TRUE)
+  {
+    clock_gettime(CLOCK_MONOTONIC, &x_time_now);
+
+    // First calculate nanos part
+    i_timeout_spent_ms = (x_time_now.tv_nsec - px_wait_start->tv_nsec) / NUM_NS_IN_MS;
+
+    if (i_timeout_spent_ms < 0)
+    {
+      // Borrow 1 from seconds
+      x_time_now.tv_sec -= 1;
+    }
+    i_timeout_spent_ms += (x_time_now.tv_sec - px_wait_start->tv_sec) * NUM_MS_IN_S;
+    px_node_timeout_this->i_timeout_left -= i_timeout_spent_ms;
+
+    if (px_node_timeout_this->i_timeout_left <= 0)
+    {
+      px_node_timeout_this->i_timeout_left =
+        dbus_timeout_get_interval(px_node_timeout_this->px_dbus_timeout);
+      printf("Handling enabled timeout\n");
+      dbus_timeout_handle(px_node_timeout_this->px_dbus_timeout);
+    }
+  }
+  
+  return LDB_SUCCESS;
+}
+
+  
 static uint8_t u8EpollWaitAndDispatch(libruuvitag_context_type* px_full_ctx)
 {
   static struct epoll_event ax_epoll_monitor_events[LDB_EPOLL_MONITOR_NUM_EVENTS];
@@ -832,17 +873,21 @@ static uint8_t u8EpollWaitAndDispatch(libruuvitag_context_type* px_full_ctx)
   if (px_node_timeout_next != NULL)
   {
     i_next_timeout = px_node_timeout_next->i_timeout_left;
-    printf("Found defined timeout %d\n", i_next_timeout);
   }
-
   
-  //clock_gettime(CLOCK_MONOTONIC,
   printf("Epoll entering wait\n");
+  clock_gettime(CLOCK_MONOTONIC, &x_wait_start);
   i_epoll_fds_ready = epoll_wait(px_full_ctx->x_ldb.i_epoll_fd, ax_epoll_monitor_events,
                                  LDB_EPOLL_MONITOR_NUM_EVENTS, i_next_timeout);
-
+  
   printf("%d fds ready in epoll\n", i_epoll_fds_ready);
 
+  if (i_epoll_fds_ready == 0)
+  {
+    vLrtLlistApplyFunc(px_full_ctx->x_ldb.px_llist_timeouts,
+                       u8CheckTimeoutForElapsed,
+                       &x_wait_start);
+  }
   for (i_epoll_iterator = 0; i_epoll_iterator < i_epoll_fds_ready; i_epoll_iterator++)
   {
     if (ax_epoll_monitor_events[i_epoll_iterator].data.fd ==
@@ -891,7 +936,7 @@ static uint8_t u8EpollWaitAndDispatch(libruuvitag_context_type* px_full_ctx)
     {
       printf("Doing list apply for watches\n");
       vLrtLlistApplyFunc(px_full_ctx->x_ldb.px_llist_watches,
-                         iDispatchDbusWatchFromEpollEvent,
+                         u8DispatchDbusWatchFromEpollEvent,
                          &(ax_epoll_monitor_events[i_epoll_iterator]));
     }
   }

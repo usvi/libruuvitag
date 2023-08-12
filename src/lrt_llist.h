@@ -41,7 +41,7 @@ lrt_llist_node* pxLrtLlistEqualParamSearch(lrt_llist_head* px_list,
                                            void* v_search_node_data);
 
 void vLrtLlistApplyFunc(lrt_llist_head* px_list,
-                        int (*iApplyFunc)(lrt_llist_node*, void*),
+                        uint8_t (*u8ApplyFunc)(lrt_llist_node*, void*),
                         void* pv_user_data);
 
 void vLrtLlistAddNode(lrt_llist_head* px_list,
