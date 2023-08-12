@@ -743,7 +743,9 @@ static void vSendReceiverInterfacesQuery(libruuvitag_context_type* px_full_ctx)
 {
   DBusMessage* px_dbus_msg = NULL;
   DBusPendingCall* px_dbus_pend_call = NULL;
-
+  lrt_ldb_node_pending_call* px_node_pending_call_new = NULL;
+  void* pv_malloc_test = NULL;
+  
   px_dbus_msg =
     dbus_message_new_method_call(LDB_METHOD_CALL_QUERY_RECEIVERS_DEF_DEST,
                                  LDB_METHOD_CALL_QUERY_RECEIVERS_DEF_PATH,
@@ -756,14 +758,24 @@ static void vSendReceiverInterfacesQuery(libruuvitag_context_type* px_full_ctx)
     
     return;
   }
-
   printf("Sending with reply\n");
+  
   if (dbus_connection_send_with_reply(px_full_ctx->x_ldb.px_dbus_conn,
                                       px_dbus_msg,
                                       &px_dbus_pend_call,
                                       1000) == TRUE)
   {
     printf("Succeeded sending\n");
+
+    pv_malloc_test = malloc(sizeof(lrt_ldb_node_watch));
+
+    if (pv_malloc_test == NULL)
+    {
+      return;
+    }
+    px_node_pending_call_new = (lrt_ldb_node_pending_call*)(pv_malloc_test);
+    vLrtLlistAddNode(px_full_ctx->x_ldb.px_llist_pending_calls,
+                     px_node_pending_call_new);
   }
   else
   {
@@ -771,7 +783,8 @@ static void vSendReceiverInterfacesQuery(libruuvitag_context_type* px_full_ctx)
 
     return;
   }
-  
+  dbus_message_unref(px_dbus_msg);
+
 }
 
 
